@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useIsFocused } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
-import { posts as postsApi, schedules as schedulesApi, notices as noticesApi, records as recordsApi, teams as teamsApi } from "../lib/api";
+import { posts as postsApi, schedules as schedulesApi, notices as noticesApi, records as recordsApi, teams as teamsApi, feeLedger as feeLedgerApi, expenses as expensesApi } from "../lib/api";
 
 export interface AttendanceStat {
   user_id: string;
@@ -118,6 +118,27 @@ export function useRecords() {
   return { records, loading, refresh };
 }
 
+/** 팀 전적 통계 */
+export function useTeamStats() {
+  const { currentTeamId } = useAuth();
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const isFocused = useIsFocused();
+
+  const refresh = useCallback(async () => {
+    if (!currentTeamId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const data = await recordsApi.getTeamStats(currentTeamId);
+      setStats(data);
+    } catch (e) { console.error("useTeamStats:", e); }
+    finally { setLoading(false); }
+  }, [currentTeamId]);
+
+  useEffect(() => { if (isFocused) refresh(); }, [refresh, isFocused]);
+  return { stats, loading, refresh };
+}
+
 /** 멤버별 출석률 통계 */
 export function useAttendanceStats() {
   const { currentTeamId } = useAuth();
@@ -137,4 +158,67 @@ export function useAttendanceStats() {
 
   useEffect(() => { if (isFocused) refresh(); }, [refresh, isFocused]);
   return { stats, loading, refresh };
+}
+
+/** 회비 목록 */
+export function useDuesLedger() {
+  const { currentTeamId } = useAuth();
+  const [fees, setFees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const isFocused = useIsFocused();
+
+  const refresh = useCallback(async () => {
+    if (!currentTeamId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const data = await feeLedgerApi.list(currentTeamId);
+      setFees(data);
+    } catch (e) { console.error("useDuesLedger:", e); }
+    finally { setLoading(false); }
+  }, [currentTeamId]);
+
+  useEffect(() => { if (isFocused) refresh(); }, [refresh, isFocused]);
+  return { fees, loading, refresh };
+}
+
+/** 월별 회비 요약 */
+export function useMonthlySummary(month: string | null) {
+  const { currentTeamId } = useAuth();
+  const [summary, setSummary] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const isFocused = useIsFocused();
+
+  const refresh = useCallback(async () => {
+    if (!currentTeamId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const data = await feeLedgerApi.getMonthlySummary(currentTeamId, month);
+      setSummary(data);
+    } catch (e) { console.error("useMonthlySummary:", e); }
+    finally { setLoading(false); }
+  }, [currentTeamId, month]);
+
+  useEffect(() => { if (isFocused) refresh(); }, [refresh, isFocused]);
+  return { summary, loading, refresh };
+}
+
+/** 지출 목록 */
+export function useExpenses(month?: string) {
+  const { currentTeamId } = useAuth();
+  const [expenseList, setExpenseList] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const isFocused = useIsFocused();
+
+  const refresh = useCallback(async () => {
+    if (!currentTeamId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const data = await expensesApi.list(currentTeamId, month);
+      setExpenseList(data);
+    } catch (e) { console.error("useExpenses:", e); }
+    finally { setLoading(false); }
+  }, [currentTeamId, month]);
+
+  useEffect(() => { if (isFocused) refresh(); }, [refresh, isFocused]);
+  return { expenses: expenseList, loading, refresh };
 }

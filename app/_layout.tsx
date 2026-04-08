@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, Text } from "react-native";
 import { AuthProvider, useAuth } from "../context/AuthContext";
+import { ToastProvider } from "../context/ToastContext";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { supabase } from "../lib/supabase";
 import { Colors } from "../constants/colors";
@@ -104,6 +105,10 @@ function AuthGate() {
         options={{ animation: "slide_from_bottom", presentation: "fullScreenModal" }}
       />
       <Stack.Screen
+        name="create-dues/index"
+        options={{ animation: "slide_from_bottom", presentation: "fullScreenModal" }}
+      />
+      <Stack.Screen
         name="mypage/index"
         options={{ headerShown: true, headerTitle: "마이페이지", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
       />
@@ -114,8 +119,10 @@ function AuthGate() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <StatusBar style="dark" />
-      <AuthGate />
+      <ToastProvider>
+        <StatusBar style="dark" />
+        <AuthGate />
+      </ToastProvider>
     </AuthProvider>
   );
 }
