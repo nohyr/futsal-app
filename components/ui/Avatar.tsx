@@ -1,4 +1,4 @@
-import { View, Text, Image, ViewStyle } from "react-native";
+import { View, Text, Image, ImageStyle, ViewStyle } from "react-native";
 import { Colors } from "../../constants/colors";
 
 interface AvatarProps {
@@ -8,6 +8,8 @@ interface AvatarProps {
   imageUrl?: string | null;
   style?: ViewStyle;
 }
+
+type AnyStyle = ViewStyle | ImageStyle;
 
 export function Avatar({ name, number, size = 40, imageUrl, style }: AvatarProps) {
   const initial = name.charAt(0);
@@ -23,7 +25,7 @@ export function Avatar({ name, number, size = 40, imageUrl, style }: AvatarProps
             borderRadius: size / 2,
             backgroundColor: Colors.gray[100],
           },
-          style,
+          style as ImageStyle,
         ]}
       />
     );
