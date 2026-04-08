@@ -291,14 +291,21 @@ export const schedules = {
 // Notices
 // =============================================
 export const notices = {
+  /** 공지 목록 + 읽음 상태 포함 */
   async list(teamId: string) {
+    const userId = (await auth.getUser())?.id;
     const { data } = await supabase
       .from("notices")
-      .select("*")
+      .select("*, notice_reads(user_id)")
       .eq("team_id", teamId)
       .order("is_pinned", { ascending: false })
       .order("created_at", { ascending: false });
-    return data || [];
+
+    return (data || []).map((n: any) => ({
+      ...n,
+      is_read: (n.notice_reads || []).some((r: any) => r.user_id === userId),
+      read_count: (n.notice_reads || []).length,
+    }));
   },
 
   async create(teamId: string, notice: { title: string; content: string; category?: string; is_pinned?: boolean }) {
@@ -332,12 +339,49 @@ export const notices = {
   async delete(noticeId: string) {
     return supabase.from("notices").delete().eq("id", noticeId);
   },
+
+  /** 공지 읽음 처리 */
+  async markAsRead(noticeId: string) {
+    const userId = (await auth.getUser())?.id;
+    if (!userId) return;
+    await supabase
+      .from("notice_reads")
+      .upsert({ notice_id: noticeId, user_id: userId }, { onConflict: "notice_id,user_id" });
+  },
+
+  /** 미읽음 공지 개수 */
+  async getUnreadCount(teamId: string): Promise<number> {
+    const userId = (await auth.getUser())?.id;
+    if (!userId) return 0;
+    const { data: allNotices } = await supabase
+      .from("notices")
+      .select("id")
+      .eq("team_id", teamId);
+    const { data: reads } = await supabase
+      .from("notice_reads")
+      .select("notice_id")
+      .eq("user_id", userId);
+    const readIds = new Set((reads || []).map((r: any) => r.notice_id));
+    return (allNotices || []).filter((n: any) => !readIds.has(n.id)).length;
+  },
+
+  /** 공지별 읽음 통계 (관리자용) */
+  async getReadStats(noticeId: string) {
+    const { data } = await supabase.rpc("get_notice_read_stats", { p_notice_id: noticeId });
+    return data?.[0] || { total_members: 0, read_count: 0, read_rate: 0, unread_users: [] };
+  },
 };
 
 // =============================================
 // Records
 // =============================================
 export const records = {
+  /** 팀 전적 통계 */
+  async getTeamStats(teamId: string) {
+    const { data } = await supabase.rpc("get_team_match_stats", { p_team_id: teamId });
+    return data?.[0] || null;
+  },
+
   async list(teamId: string) {
     const { data } = await supabase
       .from("records")
@@ -368,6 +412,159 @@ export const records = {
 
   async delete(recordId: string) {
     return supabase.from("records").delete().eq("id", recordId);
+  },
+};
+
+// =============================================
+// Fee Ledger (회비 장부)
+// =============================================
+export const feeLedger = {
+  /** 회비 목록 + 납부 상태 포함 */
+  async list(teamId: string) {
+    const { data } = await supabase
+      .from("fee_items")
+      .select("*, fee_payments(*, users(id, name, profile_image))")
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false });
+
+    return (data || []).map((item: any) => {
+      const payments = item.fee_payments || [];
+      const paidCount = payments.filter((p: any) => p.is_paid).length;
+      return { ...item, payments, paid_count: paidCount, total_count: payments.length };
+    });
+  },
+
+  /** 회비 항목 생성 + 팀원 전체에 payment 레코드 자동 생성 */
+  async create(teamId: string, fee: { name: string; amount: number; category?: string; month?: string; description?: string }) {
+    // 항목 생성
+    const { data: item, error } = await supabase
+      .from("fee_items")
+      .insert({ ...fee, team_id: teamId })
+      .select()
+      .single();
+
+    if (error || !item) throw error || new Error("회비 항목 생성 실패");
+
+    // 팀원 전체에 payment 레코드 생성
+    const { data: members } = await supabase
+      .from("team_members")
+      .select("user_id")
+      .eq("team_id", teamId);
+
+    if (members && members.length > 0) {
+      const paymentRecords = members.map((m: any) => ({
+        fee_item_id: item.id,
+        user_id: m.user_id,
+        is_paid: false,
+      }));
+      await supabase.from("fee_payments").insert(paymentRecords);
+    }
+
+    // 알림: 팀원에게 새 회비 알림
+    const userId = (await auth.getUser())?.id;
+    notifications.sendToTeam(
+      teamId, "new_notice", "새 회비",
+      `${fee.name} ${fee.amount.toLocaleString()}원`,
+      { route: "/(tabs)/records" },
+      userId || undefined,
+    );
+
+    return item;
+  },
+
+  /** 회비 항목 삭제 */
+  async delete(feeId: string) {
+    return supabase.from("fee_items").delete().eq("id", feeId);
+  },
+
+  /** 납부 처리 */
+  async markPaid(feeItemId: string, userId: string) {
+    return supabase
+      .from("fee_payments")
+      .update({ is_paid: true, paid_at: new Date().toISOString() })
+      .eq("fee_item_id", feeItemId)
+      .eq("user_id", userId);
+  },
+
+  /** 납부 취소 */
+  async markUnpaid(feeItemId: string, userId: string) {
+    return supabase
+      .from("fee_payments")
+      .update({ is_paid: false, paid_at: null })
+      .eq("fee_item_id", feeItemId)
+      .eq("user_id", userId);
+  },
+
+  /** 월별 요약 */
+  async getMonthlySummary(teamId: string, month: string | null) {
+    const { data } = await supabase.rpc("get_monthly_fee_summary", {
+      p_team_id: teamId,
+      p_month: month,
+    });
+    return data?.[0] || { total_amount: 0, paid_amount: 0, unpaid_amount: 0, payment_rate: 0 };
+  },
+
+  /** 미납자 목록 */
+  async getUnpaidMembers(feeItemId: string) {
+    const { data } = await supabase
+      .from("fee_payments")
+      .select("*, users(id, name, profile_image)")
+      .eq("fee_item_id", feeItemId)
+      .eq("is_paid", false);
+    return data || [];
+  },
+
+  /** 미납자 푸시 알림 */
+  async sendUnpaidReminder(teamId: string, feeItemId: string) {
+    const unpaid = await feeLedger.getUnpaidMembers(feeItemId);
+    const { data: feeItem } = await supabase
+      .from("fee_items")
+      .select("name, amount")
+      .eq("id", feeItemId)
+      .single();
+
+    for (const p of unpaid) {
+      notifications.sendToUser(
+        p.user_id,
+        "new_notice",
+        "회비 납부 안내",
+        `${feeItem?.name || "회비"} ${feeItem?.amount?.toLocaleString() || ""}원 미납입니다`,
+        { route: "/(tabs)/records" },
+      );
+    }
+  },
+};
+
+// =============================================
+// Expenses (지출 내역)
+// =============================================
+export const expenses = {
+  /** 지출 목록 */
+  async list(teamId: string, month?: string) {
+    let query = supabase
+      .from("expenses")
+      .select("*, users:created_by(name, profile_image)")
+      .eq("team_id", teamId)
+      .order("date", { ascending: false });
+    if (month) query = query.eq("month", month);
+    const { data } = await query;
+    return data || [];
+  },
+
+  /** 지출 등록 */
+  async create(teamId: string, expense: { name: string; amount: number; category?: string; month?: string; date?: string; description?: string }) {
+    const userId = (await auth.getUser())?.id;
+    const { data } = await supabase
+      .from("expenses")
+      .insert({ ...expense, team_id: teamId, created_by: userId })
+      .select()
+      .single();
+    return data;
+  },
+
+  /** 지출 삭제 */
+  async delete(expenseId: string) {
+    return supabase.from("expenses").delete().eq("id", expenseId);
   },
 };
 
