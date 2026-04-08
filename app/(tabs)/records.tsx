@@ -2,7 +2,8 @@ import { useState } from "react";
 import { ScrollView, View, Text, Pressable, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useRecords, useTeam } from "../../hooks/useSupabase";
+import { useRecords, useTeam, useAttendanceStats } from "../../hooks/useSupabase";
+import { Avatar } from "../../components/ui/Avatar";
 import { SectionHeader } from "../../components/ui/SectionHeader";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
@@ -15,6 +16,7 @@ export default function RecordsScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>("archive");
   const { records, loading } = useRecords();
   const { team } = useTeam();
+  const { stats: attendanceStats } = useAttendanceStats();
 
   const members = team?.team_members || [];
 
@@ -104,6 +106,29 @@ export default function RecordsScreen() {
                 </View>
               )}
             </Card>
+
+            {/* 출석률 랭킹 */}
+            {attendanceStats.length > 0 && (
+              <Card>
+                <Text style={{ fontSize: 17, fontWeight: "600", color: Colors.gray[900], marginBottom: 12 }}>출석률</Text>
+                {[...attendanceStats]
+                  .sort((a: any, b: any) => (b.attendance_rate || 0) - (a.attendance_rate || 0))
+                  .map((stat: any, i: number) => (
+                    <View key={stat.user_id} style={{
+                      flexDirection: "row", alignItems: "center", paddingVertical: 10,
+                      borderBottomWidth: i < attendanceStats.length - 1 ? 1 : 0, borderBottomColor: Colors.gray[100],
+                    }}>
+                      <Text style={{ width: 28, fontSize: 16, fontWeight: "700", color: i < 3 ? Colors.primary[500] : Colors.gray[500], textAlign: "center" }}>{i + 1}</Text>
+                      <Avatar name={stat.user_name || "?"} imageUrl={stat.profile_image} size={32} style={{ marginLeft: 8 }} />
+                      <Text style={{ flex: 1, fontSize: 15, fontWeight: "600", color: Colors.gray[900], marginLeft: 10 }}>{stat.user_name}</Text>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.primary[500] }}>{stat.attendance_rate}%</Text>
+                        <Text style={{ fontSize: 11, color: Colors.gray[500] }}>{stat.attended}/{stat.total_events}</Text>
+                      </View>
+                    </View>
+                  ))}
+              </Card>
+            )}
           </View>
         )}
       </ScrollView>

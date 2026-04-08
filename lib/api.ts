@@ -118,6 +118,13 @@ export const posts = {
       .insert({ ...post, team_id: teamId, author_id: userId })
       .select("*, users!author_id(*)")
       .single();
+
+    // 알림: 팀원에게 새 게시글 알림
+    if (data) {
+      const authorName = data.users?.name || "팀원";
+      notifications.sendToTeam(teamId, "new_post", "새 게시글", `${authorName}님이 "${post.title}" 게시글을 올렸습니다`, { route: `/post/${data.id}` }, userId);
+    }
+
     return data;
   },
 
@@ -137,6 +144,14 @@ export const posts = {
       return false;
     } else {
       await supabase.from("likes").insert({ post_id: postId, user_id: userId });
+
+      // 알림: 게시글 작성자에게 좋아요 알림
+      const { data: post } = await supabase.from("posts").select("author_id, title").eq("id", postId).single();
+      if (post && post.author_id !== userId) {
+        const { data: liker } = await supabase.from("users").select("name").eq("id", userId).single();
+        notifications.sendToUser(post.author_id, "new_like", "좋아요", `${liker?.name || "팀원"}님이 "${post.title}" 게시글을 좋아합니다`, { route: `/post/${postId}` });
+      }
+
       return true;
     }
   },
@@ -150,6 +165,16 @@ export const posts = {
       .insert({ post_id: postId, author_id: userId, content })
       .select("*, users!author_id(*)")
       .single();
+
+    // 알림: 게시글 작성자에게 댓글 알림
+    if (data) {
+      const { data: post } = await supabase.from("posts").select("author_id, title").eq("id", postId).single();
+      if (post && post.author_id !== userId) {
+        const commenterName = data.users?.name || "팀원";
+        notifications.sendToUser(post.author_id, "new_comment", "새 댓글", `${commenterName}님이 "${post.title}"에 댓글을 남겼습니다`, { route: `/post/${postId}` });
+      }
+    }
+
     return data;
   },
 
@@ -172,11 +197,20 @@ export const schedules = {
   },
 
   async create(teamId: string, schedule: { type: string; date: string; time: string; location: string; opponent?: string; description?: string }) {
+    const userId = (await auth.getUser())?.id;
     const { data } = await supabase
       .from("schedules")
       .insert({ ...schedule, team_id: teamId })
       .select()
       .single();
+
+    // 알림: 팀원에게 새 일정 알림
+    if (data) {
+      const typeLabel = schedule.type === "match" ? "경기" : schedule.type === "training" ? "훈련" : "모임";
+      const title = schedule.opponent ? `vs ${schedule.opponent}` : schedule.description || typeLabel;
+      notifications.sendToTeam(teamId, "new_schedule", "새 일정", `${schedule.date} ${schedule.time} ${title}`, { route: "/(tabs)/schedule" }, userId || undefined);
+    }
+
     return data;
   },
 
@@ -197,6 +231,59 @@ export const schedules = {
 
   async delete(scheduleId: string) {
     return supabase.from("schedules").delete().eq("id", scheduleId);
+  },
+
+  /** admin: 특정 멤버 출석 체크 */
+  async checkIn(scheduleId: string, userId: string) {
+    const { data } = await supabase
+      .from("attendances")
+      .update({ checked_in: true, checked_in_at: new Date().toISOString(), is_no_show: false })
+      .eq("schedule_id", scheduleId)
+      .eq("user_id", userId)
+      .select()
+      .single();
+    return data;
+  },
+
+  /** admin: no-show 처리 */
+  async markNoShow(scheduleId: string, userId: string) {
+    const { data } = await supabase
+      .from("attendances")
+      .update({ checked_in: false, is_no_show: true })
+      .eq("schedule_id", scheduleId)
+      .eq("user_id", userId)
+      .select()
+      .single();
+    return data;
+  },
+
+  /** admin: 일괄 출석 체크 */
+  async bulkCheckIn(scheduleId: string, checkedInUserIds: string[], allUserIds: string[]) {
+    const now = new Date().toISOString();
+    const updates = allUserIds.map((uid) => {
+      const isCheckedIn = checkedInUserIds.includes(uid);
+      return supabase
+        .from("attendances")
+        .upsert(
+          {
+            schedule_id: scheduleId,
+            user_id: uid,
+            checked_in: isCheckedIn,
+            checked_in_at: isCheckedIn ? now : null,
+            is_no_show: !isCheckedIn,
+            status: isCheckedIn ? "attending" : "not_attending",
+            updated_at: now,
+          },
+          { onConflict: "schedule_id,user_id" },
+        );
+    });
+    await Promise.all(updates);
+  },
+
+  /** 멤버별 출석률 통계 */
+  async getAttendanceStats(teamId: string) {
+    const { data } = await supabase.rpc("get_attendance_stats", { p_team_id: teamId });
+    return data || [];
   },
 };
 
@@ -223,6 +310,12 @@ export const notices = {
       .insert({ ...notice, team_id: teamId, author_id: userId })
       .select()
       .single();
+
+    // 알림: 팀원에게 새 공지 알림
+    if (data) {
+      notifications.sendToTeam(teamId, "new_notice", "새 공지", notice.title, { route: "/(tabs)/notice" }, userId);
+    }
+
     return data;
   },
 
@@ -275,6 +368,150 @@ export const records = {
 
   async delete(recordId: string) {
     return supabase.from("records").delete().eq("id", recordId);
+  },
+};
+
+// =============================================
+// Notifications
+// =============================================
+export const notifications = {
+  /** 내 알림 목록 */
+  async list(limit = 30) {
+    const userId = (await auth.getUser())?.id;
+    if (!userId) return [];
+    const { data } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    return data || [];
+  },
+
+  /** 읽음 처리 */
+  async markRead(notificationId: string) {
+    return supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("id", notificationId);
+  },
+
+  /** 전체 읽음 */
+  async markAllRead() {
+    const userId = (await auth.getUser())?.id;
+    if (!userId) return;
+    return supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", userId)
+      .eq("is_read", false);
+  },
+
+  /** 푸시 토큰 등록 */
+  async registerToken(token: string) {
+    const userId = (await auth.getUser())?.id;
+    if (!userId) return;
+    return supabase
+      .from("users")
+      .update({ push_token: token })
+      .eq("id", userId);
+  },
+
+  /** 팀원들에게 알림 발송 + DB 저장 */
+  async sendToTeam(
+    teamId: string,
+    type: string,
+    title: string,
+    body: string,
+    data: Record<string, any> = {},
+    excludeUserId?: string,
+  ) {
+    try {
+      // 1. 팀원들의 push_token 조회
+      const { data: tokens } = await supabase.rpc("get_team_push_tokens", {
+        p_team_id: teamId,
+        p_exclude_user_id: excludeUserId || null,
+      });
+
+      if (!tokens || tokens.length === 0) return;
+
+      // 2. DB에 알림 레코드 저장
+      const notifRecords = tokens.map((t: any) => ({
+        user_id: t.user_id,
+        type,
+        title,
+        body,
+        data,
+      }));
+      await supabase.from("notifications").insert(notifRecords);
+
+      // 3. Expo Push API로 발송
+      const pushMessages = tokens
+        .filter((t: any) => t.push_token)
+        .map((t: any) => ({
+          to: t.push_token,
+          sound: "default",
+          title,
+          body,
+          data,
+        }));
+
+      if (pushMessages.length > 0) {
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(pushMessages),
+        });
+      }
+    } catch (e) {
+      console.error("sendToTeam notification error:", e);
+    }
+  },
+
+  /** 특정 사용자에게 알림 발송 */
+  async sendToUser(
+    userId: string,
+    type: string,
+    title: string,
+    body: string,
+    data: Record<string, any> = {},
+  ) {
+    try {
+      // DB 저장
+      await supabase.from("notifications").insert({
+        user_id: userId,
+        type,
+        title,
+        body,
+        data,
+      });
+
+      // push_token 조회 + 발송
+      const { data: user } = await supabase
+        .from("users")
+        .select("push_token")
+        .eq("id", userId)
+        .single();
+
+      if (user?.push_token) {
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            to: user.push_token,
+            sound: "default",
+            title,
+            body,
+            data,
+          }),
+        });
+      }
+    } catch (e) {
+      console.error("sendToUser notification error:", e);
+    }
   },
 };
 

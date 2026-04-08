@@ -1,6 +1,6 @@
 import { ScrollView, View, Text, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTeam } from "../../hooks/useSupabase";
+import { useTeam, useAttendanceStats } from "../../hooks/useSupabase";
 import { Card } from "../../components/ui/Card";
 import { Avatar } from "../../components/ui/Avatar";
 import { Badge } from "../../components/ui/Badge";
@@ -9,6 +9,7 @@ import { Colors } from "../../constants/colors";
 export default function TeamScreen() {
   const { team, loading } = useTeam();
 
+  const { stats: attendanceStats } = useAttendanceStats();
   const members = team?.team_members || [];
 
   if (loading) {
@@ -96,6 +97,15 @@ export default function TeamScreen() {
                   #{member.number || 0} {member.position === "GK" ? "골키퍼" : "필드"}
                 </Text>
               </View>
+              {(() => {
+                const stat = attendanceStats.find((s: any) => s.user_id === member.user_id);
+                return stat && stat.total_events > 0 ? (
+                  <View style={{ alignItems: "flex-end" }}>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: Colors.primary[500] }}>{stat.attendance_rate}%</Text>
+                    <Text style={{ fontSize: 11, color: Colors.gray[500] }}>출석률</Text>
+                  </View>
+                ) : null;
+              })()}
             </View>
           ))}
         </Card>

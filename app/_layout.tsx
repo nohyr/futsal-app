@@ -4,11 +4,13 @@ import { Platform } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, Text } from "react-native";
 import { AuthProvider, useAuth } from "../context/AuthContext";
+import { usePushNotifications } from "../hooks/usePushNotifications";
 import { supabase } from "../lib/supabase";
 import { Colors } from "../constants/colors";
 
 function AuthGate() {
   const { isLoggedIn, isLoading, teams } = useAuth();
+  usePushNotifications(); // 로그인 후 푸시 토큰 자동 등록
   const router = useRouter();
   const segments = useSegments();
   const [isProcessingCallback, setIsProcessingCallback] = useState(false);
@@ -80,6 +82,10 @@ function AuthGate() {
       <Stack.Screen
         name="post/[id]"
         options={{ headerShown: true, headerTitle: "", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
+      />
+      <Stack.Screen
+        name="check-in/[scheduleId]"
+        options={{ animation: "slide_from_bottom", presentation: "fullScreenModal" }}
       />
       <Stack.Screen
         name="create-post/index"

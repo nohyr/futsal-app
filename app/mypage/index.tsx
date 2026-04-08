@@ -3,7 +3,7 @@ import { ScrollView, View, Text, Pressable, Alert, ActivityIndicator } from "rea
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
-import { useTeam, usePosts, useRecords } from "../../hooks/useSupabase";
+import { useTeam, usePosts, useRecords, useAttendanceStats } from "../../hooks/useSupabase";
 import { Card } from "../../components/ui/Card";
 import { Avatar } from "../../components/ui/Avatar";
 import { Badge } from "../../components/ui/Badge";
@@ -16,10 +16,12 @@ export default function MyPageScreen() {
   const { team } = useTeam();
   const { posts } = usePosts();
   const { records } = useRecords();
+  const { stats: attendanceStats } = useAttendanceStats();
 
   const members = team?.team_members || [];
   const myMembership = members.find((m: any) => m.user_id === user?.id);
   const myPosts = posts.filter((p: any) => p.author_id === user?.id);
+  const myStat = attendanceStats.find((s: any) => s.user_id === user?.id);
 
   const handleLogout = () => {
     Alert.alert("로그아웃", "정말 로그아웃 하시겠습니까?", [
@@ -61,8 +63,10 @@ export default function MyPageScreen() {
               <Text style={{ fontSize: 13, color: Colors.gray[500] }}>어시스트</Text>
             </View>
             <View style={{ alignItems: "center" }}>
-              <Text style={{ fontSize: 28, fontWeight: "700", color: Colors.success[500] }}>{myPosts.length}</Text>
-              <Text style={{ fontSize: 13, color: Colors.gray[500] }}>게시글</Text>
+              <Text style={{ fontSize: 28, fontWeight: "700", color: Colors.success[500] }}>
+                {myStat ? `${myStat.attendance_rate}%` : "-"}
+              </Text>
+              <Text style={{ fontSize: 13, color: Colors.gray[500] }}>출석률</Text>
             </View>
           </View>
         </Card>
