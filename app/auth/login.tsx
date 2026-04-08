@@ -1,10 +1,91 @@
-import { View, Text, Pressable } from "react-native";
+import { useState } from "react";
+import { View, Text, Pressable, Platform, ActivityIndicator, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
 import { Colors } from "../../constants/colors";
-import { useAuth } from "../../context/AuthContext";
+import { supabase } from "../../lib/supabase";
+
+// 인앱 브라우저 세션 정리
+WebBrowser.maybeCompleteAuthSession();
+
+const REDIRECT_URI = "futsal-app://auth/callback";
 
 export default function LoginScreen() {
-  const { signInWithKakao } = useAuth();
+  const [loading, setLoading] = useState(false);
+
+  const handleKakaoLogin = async () => {
+    setLoading(true);
+    try {
+      if (Platform.OS === "web") {
+        await supabase.auth.signInWithOAuth({ provider: "kakao" });
+        return;
+      }
+
+      // 네이티브: Supabase OAuth URL 생성
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "kakao",
+        options: {
+          redirectTo: REDIRECT_URI,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error || !data?.url) {
+        Alert.alert("오류", "로그인 URL 생성에 실패했습니다.");
+        return;
+      }
+
+      // 인앱 브라우저에서 카카오 로그인
+      const result = await WebBrowser.openAuthSessionAsync(data.url, REDIRECT_URI);
+
+      if (result.type === "success" && result.url) {
+        // URL에서 토큰 추출 (hash 또는 query 모두 처리)
+        const url = result.url;
+        let accessToken: string | null = null;
+        let refreshToken: string | null = null;
+
+        // #access_token=... 형식 (fragment)
+        const hashIndex = url.indexOf("#");
+        if (hashIndex !== -1) {
+          const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
+          accessToken = hashParams.get("access_token");
+          refreshToken = hashParams.get("refresh_token");
+        }
+
+        // ?access_token=... 형식 (query) — fallback
+        if (!accessToken) {
+          const queryIndex = url.indexOf("?");
+          if (queryIndex !== -1) {
+            const queryParams = new URLSearchParams(url.substring(queryIndex + 1));
+            accessToken = queryParams.get("access_token");
+            refreshToken = queryParams.get("refresh_token");
+          }
+        }
+
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) {
+            console.error("Session error:", sessionError);
+            Alert.alert("오류", "세션 설정에 실패했습니다.");
+          }
+          // AuthGate가 세션 변경을 감지하여 자동 이동
+        } else {
+          console.log("No tokens found in URL:", url);
+          Alert.alert("오류", "로그인 토큰을 받지 못했습니다. 다시 시도해주세요.");
+        }
+      } else if (result.type === "cancel" || result.type === "dismiss") {
+        // 사용자가 브라우저를 닫음 — 아무것도 하지 않음
+      }
+    } catch (e: any) {
+      console.error("Kakao login error:", e);
+      Alert.alert("오류", "로그인 중 문제가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.gray[0], justifyContent: "center", alignItems: "center", padding: 24 }}>
@@ -27,7 +108,8 @@ export default function LoginScreen() {
 
       {/* Kakao Login Button */}
       <Pressable
-        onPress={signInWithKakao}
+        onPress={handleKakaoLogin}
+        disabled={loading}
         style={({ pressed }) => ({
           flexDirection: "row",
           alignItems: "center",
@@ -37,14 +119,21 @@ export default function LoginScreen() {
           height: 52,
           borderRadius: 12,
           backgroundColor: pressed ? "#F5DC00" : "#FEE500",
+          opacity: loading ? 0.7 : 1,
         })}
       >
-        <View style={{ width: 20, height: 20, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name="chatbubble" size={18} color="#191919" />
-        </View>
-        <Text style={{ fontSize: 16, fontWeight: "600", color: "#191919" }}>
-          카카오 로그인
-        </Text>
+        {loading ? (
+          <ActivityIndicator size="small" color="#191919" />
+        ) : (
+          <>
+            <View style={{ width: 20, height: 20, alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name="chatbubble" size={18} color="#191919" />
+            </View>
+            <Text style={{ fontSize: 16, fontWeight: "600", color: "#191919" }}>
+              카카오 로그인
+            </Text>
+          </>
+        )}
       </Pressable>
 
       <Text style={{ fontSize: 12, color: Colors.gray[500], marginTop: 20, textAlign: "center", lineHeight: 18 }}>
