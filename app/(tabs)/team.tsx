@@ -1,4 +1,4 @@
-import { ScrollView, View, Text, ActivityIndicator } from "react-native";
+import { ScrollView, View, Text, Image, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTeam, useAttendanceStats } from "../../hooks/useSupabase";
 import { Card } from "../../components/ui/Card";
@@ -29,12 +29,11 @@ export default function TeamScreen() {
       {/* Team Info Card */}
       <Card>
         <View style={{ alignItems: "center", paddingVertical: 8 }}>
-          <View style={{
-            width: 64, height: 64, borderRadius: 32,
-            backgroundColor: Colors.primary[50], alignItems: "center", justifyContent: "center", marginBottom: 12,
-          }}>
-            <Ionicons name="shield" size={32} color={Colors.primary[500]} />
-          </View>
+          <Image
+            source={require("../../assets/defe-spirit-logo.png")}
+            style={{ width: 80, height: 80, marginBottom: 12 }}
+            resizeMode="contain"
+          />
           <Text style={{ fontSize: 24, fontWeight: "700", color: Colors.gray[900], marginBottom: 4 }}>
             {team?.name || "팀"}
           </Text>

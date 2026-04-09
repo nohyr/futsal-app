@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { ScrollView, View, Text, Pressable, Alert, ActivityIndicator } from "react-native";
+import { useEffect } from "react";
+import { useState } from "react";
+import { ScrollView, View, Text, Pressable, ActivityIndicator, Modal } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
@@ -22,15 +23,11 @@ export default function MyPageScreen() {
   const myMembership = members.find((m: any) => m.user_id === user?.id);
   const myPosts = posts.filter((p: any) => p.author_id === user?.id);
   const myStat = attendanceStats.find((s: any) => s.user_id === user?.id);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const handleLogout = () => {
-    Alert.alert("로그아웃", "정말 로그아웃 하시겠습니까?", [
-      { text: "취소", style: "cancel" },
-      {
-        text: "로그아웃", style: "destructive",
-        onPress: async () => { await signOut(); router.replace("/auth/login"); },
-      },
-    ]);
+  const handleLogout = async () => {
+    await signOut();
+    router.replace("/auth/login");
   };
 
   return (
@@ -116,9 +113,59 @@ export default function MyPageScreen() {
         ))}
       </Card>
 
-      <Pressable onPress={handleLogout} style={{ alignItems: "center", paddingVertical: 16 }}>
+      <Pressable onPress={() => setShowLogoutModal(true)} style={{ alignItems: "center", paddingVertical: 16 }}>
         <Text style={{ fontSize: 14, color: Colors.danger[500] }}>로그아웃</Text>
       </Pressable>
+
+      {/* 로그아웃 확인 모달 */}
+      <Modal visible={showLogoutModal} transparent animationType="fade" onRequestClose={() => setShowLogoutModal(false)}>
+        <Pressable
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" }}
+          onPress={() => setShowLogoutModal(false)}
+        >
+          <Pressable style={{
+            width: 300, backgroundColor: Colors.gray[0], borderRadius: 16,
+            paddingTop: 28, paddingBottom: 16, paddingHorizontal: 24,
+            shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 24, elevation: 10,
+          }}>
+            <View style={{ alignItems: "center", marginBottom: 20 }}>
+              <View style={{
+                width: 52, height: 52, borderRadius: 26,
+                backgroundColor: Colors.danger[50], alignItems: "center", justifyContent: "center", marginBottom: 16,
+              }}>
+                <Ionicons name="log-out-outline" size={26} color={Colors.danger[500]} />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: "700", color: Colors.gray[900], marginBottom: 8 }}>
+                로그아웃
+              </Text>
+              <Text style={{ fontSize: 14, color: Colors.gray[500], textAlign: "center", lineHeight: 20 }}>
+                정말 로그아웃 하시겠습니까?
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <Pressable
+                onPress={() => setShowLogoutModal(false)}
+                style={{
+                  flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center",
+                  backgroundColor: Colors.gray[100],
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "600", color: Colors.gray[700] }}>취소</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => { setShowLogoutModal(false); handleLogout(); }}
+                style={{
+                  flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: "center",
+                  backgroundColor: Colors.danger[500],
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "600", color: "#FFF" }}>로그아웃</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }

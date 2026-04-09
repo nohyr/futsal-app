@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "futsal-app",
+    "name": "데프스피릿 FC",
     "slug": "futsal-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/defe-spirit-logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "scheme": "futsal-app",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/defe-spirit-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#F9FAFB"
     },
@@ -18,7 +18,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/defe-spirit-logo.png",
         "backgroundColor": "#F9FAFB"
       },
       "edgeToEdgeEnabled": true,
@@ -26,7 +26,7 @@
       "package": "com.yrnoh.futsalapp"
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/defe-spirit-logo.png",
       "bundler": "metro"
     },
     "plugins": [
@@ -34,7 +34,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/defe-spirit-logo.png",
           "color": "#3182F6"
         }
       ],
