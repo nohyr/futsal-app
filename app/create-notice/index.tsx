@@ -3,6 +3,7 @@ import { View, Text, TextInput, Pressable, KeyboardAvoidingView, Platform, Scrol
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import { notices as noticesApi } from "../../lib/api";
 import { Button } from "../../components/ui/Button";
 import { Colors } from "../../constants/colors";
@@ -16,6 +17,7 @@ const categories: { key: Category; label: string }[] = [
 export default function CreateNoticeScreen() {
   const router = useRouter();
   const { currentTeamId } = useAuth();
+  const { showToast } = useToast();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [category, setCategory] = useState<Category>("general");
@@ -25,13 +27,18 @@ export default function CreateNoticeScreen() {
   const canSubmit = title.trim() && content.trim() && !submitting;
 
   const handleSubmit = async () => {
-    if (!canSubmit || !currentTeamId) return;
+    if (!title.trim()) { showToast("제목을 입력해주세요", "error"); return; }
+    if (!content.trim()) { showToast("내용을 입력해주세요", "error"); return; }
+    if (!currentTeamId) return;
     setSubmitting(true);
     try {
       await noticesApi.create(currentTeamId, { title, content, category, is_pinned: isPinned });
-      router.back();
-    } catch (e) { console.error(e); }
-    finally { setSubmitting(false); }
+      showToast("공지가 등록되었습니다", "success");
+      setTimeout(() => router.back(), 500);
+    } catch (e) {
+      console.error(e);
+      showToast("저장에 실패했습니다", "error");
+    } finally { setSubmitting(false); }
   };
 
   return (

@@ -3,6 +3,7 @@ import { View, Text, TextInput, Pressable, KeyboardAvoidingView, Platform, Scrol
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import { posts as postsApi } from "../../lib/api";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -19,6 +20,7 @@ const postTypes: { key: PostType; label: string; icon: string }[] = [
 export default function CreatePostScreen() {
   const router = useRouter();
   const { currentTeamId } = useAuth();
+  const { showToast } = useToast();
   const [type, setType] = useState<PostType>("video");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -27,13 +29,17 @@ export default function CreatePostScreen() {
   const canSubmit = title.trim().length > 0 && content.trim().length > 0 && !submitting;
 
   const handleSubmit = async () => {
-    if (!canSubmit || !currentTeamId) return;
+    if (!title.trim()) { showToast("제목을 입력해주세요", "error"); return; }
+    if (!content.trim()) { showToast("내용을 입력해주세요", "error"); return; }
+    if (!currentTeamId) return;
     setSubmitting(true);
     try {
       await postsApi.create(currentTeamId, { type, title, content });
-      router.back();
+      showToast("게시글이 등록되었습니다", "success");
+      setTimeout(() => router.back(), 500);
     } catch (e) {
       console.error("create post error:", e);
+      showToast("저장에 실패했습니다", "error");
     } finally {
       setSubmitting(false);
     }
