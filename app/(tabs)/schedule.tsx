@@ -1,4 +1,5 @@
-import { ScrollView, View, Text, Pressable, ActivityIndicator } from "react-native";
+import { useState, useEffect } from "react";
+import { ScrollView, View, Text, Pressable, ActivityIndicator, Linking } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSchedules, useTeam } from "../../hooks/useSupabase";
@@ -9,6 +10,7 @@ import { Avatar } from "../../components/ui/Avatar";
 import { SectionHeader } from "../../components/ui/SectionHeader";
 import { Colors } from "../../constants/colors";
 import { schedules as schedulesApi } from "../../lib/api";
+import { getWeatherForSchedule, getMapUrl, WeatherForecast } from "../../lib/weather";
 
 const typeConfig: Record<string, { label: string; variant: "primary" | "neutral" | "warning" }> = {
   match: { label: "경기", variant: "primary" },
@@ -32,6 +34,30 @@ export default function ScheduleScreen() {
   const members = team?.team_members || [];
   const myMembership = members.find((m: any) => m.users?.auth_id === user?.id || m.user_id === user?.id);
   const isAdmin = myMembership?.role === "admin";
+  const [weatherCache, setWeatherCache] = useState<Record<string, WeatherForecast | null>>({});
+
+  // 날씨 데이터 로드 (다가오는 일정만, 5일 이내)
+  useEffect(() => {
+    const loadWeather = async () => {
+      const fiveDaysLater = new Date();
+      fiveDaysLater.setDate(fiveDaysLater.getDate() + 5);
+      const targetSchedules = schedules.filter((s: any) =>
+        new Date(s.date) >= new Date() && new Date(s.date) <= fiveDaysLater
+      );
+      for (const s of targetSchedules) {
+        if (!weatherCache[s.id]) {
+          const weather = await getWeatherForSchedule(s.location, s.date, s.time);
+          if (weather) setWeatherCache((prev) => ({ ...prev, [s.id]: weather }));
+        }
+      }
+    };
+    if (schedules.length > 0) loadWeather();
+  }, [schedules]);
+
+  const openMap = (location: string) => {
+    const url = getMapUrl(location);
+    Linking.openURL(url).catch(() => {});
+  };
 
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = schedules.filter((s: any) => s.date >= today).sort((a: any, b: any) => a.date.localeCompare(b.date));
@@ -86,7 +112,34 @@ export default function ScheduleScreen() {
                     <Text style={{ fontSize: 17, fontWeight: "600", color: Colors.gray[900], marginBottom: 4 }}>
                       {s.opponent ? `vs ${s.opponent}` : s.description || config.label}
                     </Text>
-                    <Text style={{ fontSize: 13, color: Colors.gray[500], marginBottom: 12 }}>{s.location}</Text>
+                    {/* 구장 + 길찾기 */}
+                    <Pressable onPress={() => openMap(s.location)} style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 }}>
+                      <Ionicons name="location" size={14} color={Colors.primary[500]} />
+                      <Text style={{ fontSize: 13, color: Colors.primary[500], textDecorationLine: "underline" }}>{s.location}</Text>
+                      <Ionicons name="navigate-outline" size={12} color={Colors.primary[500]} />
+                    </Pressable>
+
+                    {/* 날씨 */}
+                    {weatherCache[s.id] && (
+                      <View style={{
+                        flexDirection: "row", alignItems: "center", gap: 8,
+                        backgroundColor: weatherCache[s.id]!.isRainy ? Colors.danger[50] : Colors.primary[50],
+                        borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
+                      }}>
+                        <Text style={{ fontSize: 20 }}>{weatherCache[s.id]!.emoji}</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.gray[900] }}>
+                            {weatherCache[s.id]!.temp}° · {weatherCache[s.id]!.description}
+                          </Text>
+                          <Text style={{ fontSize: 12, color: Colors.gray[500] }}>
+                            체감 {weatherCache[s.id]!.feelsLike}° · 강수 {Math.round(weatherCache[s.id]!.pop * 100)}% · 바람 {weatherCache[s.id]!.windSpeed}m/s
+                          </Text>
+                        </View>
+                        {weatherCache[s.id]!.isRainy && (
+                          <Badge label="우천 주의" variant="danger" />
+                        )}
+                      </View>
+                    )}
 
                     {/* 참석 현황 상세 */}
                     <View style={{
