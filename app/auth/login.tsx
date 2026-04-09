@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { View, Text, Pressable, Platform, ActivityIndicator, Alert, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
@@ -11,6 +11,62 @@ WebBrowser.maybeCompleteAuthSession();
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
+  // Deep link 리스너 — 항상 활성화
+  useEffect(() => {
+    const handleUrl = (event: { url: string }) => {
+      processUrl(event.url);
+    };
+
+    const subscription = Linking.addEventListener("url", handleUrl);
+
+    // 앱이 cold start로 열렸을 때 초기 URL 확인
+    Linking.getInitialURL().then((url) => {
+      if (url) processUrl(url);
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  const processUrl = async (url: string) => {
+    try {
+      let accessToken: string | null = null;
+      let refreshToken: string | null = null;
+
+      // #access_token=...
+      const hashIndex = url.indexOf("#");
+      if (hashIndex !== -1) {
+        const params = new URLSearchParams(url.substring(hashIndex + 1));
+        accessToken = params.get("access_token");
+        refreshToken = params.get("refresh_token");
+      }
+
+      // ?access_token=...
+      if (!accessToken) {
+        const qIndex = url.indexOf("?");
+        if (qIndex !== -1) {
+          const params = new URLSearchParams(url.substring(qIndex + 1));
+          accessToken = params.get("access_token");
+          refreshToken = params.get("refresh_token");
+        }
+      }
+
+      // ?code=... (PKCE)
+      if (!accessToken) {
+        const codeMatch = url.match(/[?&#]code=([^&]+)/);
+        if (codeMatch) {
+          await supabase.auth.exchangeCodeForSession(codeMatch[1]);
+          return;
+        }
+      }
+
+      if (accessToken && refreshToken) {
+        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      }
+    } catch (e) {
+      console.error("processUrl error:", e);
+    }
+  };
+
   const handleKakaoLogin = async () => {
     setLoading(true);
     try {
@@ -19,8 +75,7 @@ export default function LoginScreen() {
         return;
       }
 
-      // 네이티브: Linking URL을 redirect로 사용
-      const redirectUrl = Linking.createURL("auth/callback");
+      const redirectUrl = "futsal-app://auth/callback";
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "kakao",
@@ -35,15 +90,13 @@ export default function LoginScreen() {
         return;
       }
 
-      // 인앱 브라우저 열기
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
       if (result.type === "success" && result.url) {
-        await handleRedirectUrl(result.url);
-      } else if (result.type === "dismiss") {
-        // 브라우저가 dismiss됨 — deep link로 돌아온 경우
-        // Linking 이벤트로 처리되므로 여기서는 패스
+        await processUrl(result.url);
       }
+      // dismiss인 경우 — deep link 리스너(useEffect)가 처리
+
     } catch (e: any) {
       console.error("Kakao login error:", e);
       Alert.alert("오류", "로그인 중 문제가 발생했습니다.");
@@ -51,57 +104,6 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
-
-  // URL에서 세션 토큰 파싱
-  const handleRedirectUrl = async (url: string) => {
-    try {
-      let accessToken: string | null = null;
-      let refreshToken: string | null = null;
-
-      // #access_token=... (fragment/implicit flow)
-      const hashIndex = url.indexOf("#");
-      if (hashIndex !== -1) {
-        const params = new URLSearchParams(url.substring(hashIndex + 1));
-        accessToken = params.get("access_token");
-        refreshToken = params.get("refresh_token");
-      }
-
-      // ?access_token=... (query)
-      if (!accessToken) {
-        const qIndex = url.indexOf("?");
-        if (qIndex !== -1) {
-          const params = new URLSearchParams(url.substring(qIndex + 1));
-          accessToken = params.get("access_token");
-          refreshToken = params.get("refresh_token");
-        }
-      }
-
-      // ?code=... (PKCE flow)
-      if (!accessToken) {
-        const codeMatch = url.match(/[?&#]code=([^&]+)/);
-        if (codeMatch) {
-          await supabase.auth.exchangeCodeForSession(codeMatch[1]);
-          return;
-        }
-      }
-
-      if (accessToken && refreshToken) {
-        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-      }
-    } catch (e) {
-      console.error("handleRedirectUrl error:", e);
-    }
-  };
-
-  // Deep link 리스너 — dismiss 후 URL이 Linking으로 올 때 처리
-  useState(() => {
-    const subscription = Linking.addEventListener("url", (event) => {
-      if (event.url.includes("access_token") || event.url.includes("code=")) {
-        handleRedirectUrl(event.url);
-      }
-    });
-    return () => subscription?.remove();
-  });
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.gray[0] }}>
