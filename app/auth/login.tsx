@@ -2,12 +2,11 @@ import { useState } from "react";
 import { View, Text, Pressable, Platform, ActivityIndicator, Alert, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import { Colors } from "../../constants/colors";
 import { supabase } from "../../lib/supabase";
 
 WebBrowser.maybeCompleteAuthSession();
-
-const REDIRECT_URI = "futsal-app://auth/callback";
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
@@ -20,9 +19,15 @@ export default function LoginScreen() {
         return;
       }
 
+      // 네이티브: Linking URL을 redirect로 사용
+      const redirectUrl = Linking.createURL("auth/callback");
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "kakao",
-        options: { redirectTo: REDIRECT_URI, skipBrowserRedirect: true },
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
       });
 
       if (error || !data?.url) {
@@ -30,60 +35,14 @@ export default function LoginScreen() {
         return;
       }
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, REDIRECT_URI);
+      // 인앱 브라우저 열기
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
-      // 디버그: 실제 result 확인
-      Alert.alert("DEBUG result", JSON.stringify({ type: result.type, url: (result as any).url?.substring(0, 120) }));
-
-      if (result.type === "success" && (result as any).url) {
-        const url = (result as any).url as string;
-        let accessToken: string | null = null;
-        let refreshToken: string | null = null;
-
-        // #access_token=... (fragment)
-        const hashIndex = url.indexOf("#");
-        if (hashIndex !== -1) {
-          const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
-          accessToken = hashParams.get("access_token");
-          refreshToken = hashParams.get("refresh_token");
-        }
-        // ?access_token=... (query)
-        if (!accessToken) {
-          const queryIndex = url.indexOf("?");
-          if (queryIndex !== -1) {
-            const queryParams = new URLSearchParams(url.substring(queryIndex + 1));
-            accessToken = queryParams.get("access_token");
-            refreshToken = queryParams.get("refresh_token");
-          }
-        }
-        // ?code=... (PKCE flow)
-        if (!accessToken) {
-          const codeMatch = url.match(/[?&]code=([^&]+)/);
-          if (codeMatch) {
-            const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(codeMatch[1]);
-            if (exchangeError) {
-              Alert.alert("오류", "코드 교환 실패: " + exchangeError.message);
-            }
-            // exchangeCodeForSession이 성공하면 onAuthStateChange가 자동 트리거
-            return;
-          }
-        }
-
-        if (accessToken && refreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (sessionError) {
-            Alert.alert("오류", "세션 설정 실패: " + sessionError.message);
-          }
-        } else {
-          Alert.alert("디버그", "토큰 없음. URL: " + url.substring(0, 200));
-        }
-      } else if (result.type === "dismiss" || result.type === "cancel") {
-        // 사용자가 닫음
-      } else {
-        Alert.alert("디버그", "result.type: " + result.type);
+      if (result.type === "success" && result.url) {
+        await handleRedirectUrl(result.url);
+      } else if (result.type === "dismiss") {
+        // 브라우저가 dismiss됨 — deep link로 돌아온 경우
+        // Linking 이벤트로 처리되므로 여기서는 패스
       }
     } catch (e: any) {
       console.error("Kakao login error:", e);
@@ -93,10 +52,60 @@ export default function LoginScreen() {
     }
   };
 
+  // URL에서 세션 토큰 파싱
+  const handleRedirectUrl = async (url: string) => {
+    try {
+      let accessToken: string | null = null;
+      let refreshToken: string | null = null;
+
+      // #access_token=... (fragment/implicit flow)
+      const hashIndex = url.indexOf("#");
+      if (hashIndex !== -1) {
+        const params = new URLSearchParams(url.substring(hashIndex + 1));
+        accessToken = params.get("access_token");
+        refreshToken = params.get("refresh_token");
+      }
+
+      // ?access_token=... (query)
+      if (!accessToken) {
+        const qIndex = url.indexOf("?");
+        if (qIndex !== -1) {
+          const params = new URLSearchParams(url.substring(qIndex + 1));
+          accessToken = params.get("access_token");
+          refreshToken = params.get("refresh_token");
+        }
+      }
+
+      // ?code=... (PKCE flow)
+      if (!accessToken) {
+        const codeMatch = url.match(/[?&#]code=([^&]+)/);
+        if (codeMatch) {
+          await supabase.auth.exchangeCodeForSession(codeMatch[1]);
+          return;
+        }
+      }
+
+      if (accessToken && refreshToken) {
+        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      }
+    } catch (e) {
+      console.error("handleRedirectUrl error:", e);
+    }
+  };
+
+  // Deep link 리스너 — dismiss 후 URL이 Linking으로 올 때 처리
+  useState(() => {
+    const subscription = Linking.addEventListener("url", (event) => {
+      if (event.url.includes("access_token") || event.url.includes("code=")) {
+        handleRedirectUrl(event.url);
+      }
+    });
+    return () => subscription?.remove();
+  });
+
   return (
     <View style={{ flex: 1, backgroundColor: Colors.gray[0] }}>
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 32 }}>
-        {/* 로고 + 팀명 */}
         <View style={{ alignItems: "center", marginBottom: 48 }}>
           <Image
             source={require("../../assets/defe-spirit-logo.png")}
@@ -104,10 +113,7 @@ export default function LoginScreen() {
             resizeMode="contain"
           />
 
-          <Text style={{
-            fontSize: 28, fontWeight: "800", color: Colors.gray[900],
-            letterSpacing: 1,
-          }}>
+          <Text style={{ fontSize: 28, fontWeight: "800", color: Colors.gray[900], letterSpacing: 1 }}>
             데프스피릿 FC
           </Text>
 
@@ -116,34 +122,21 @@ export default function LoginScreen() {
             borderRadius: 20, backgroundColor: Colors.warm[50],
             borderWidth: 1, borderColor: Colors.warm[400],
           }}>
-            <Text style={{
-              fontSize: 14, fontWeight: "600", color: Colors.warm[500],
-              letterSpacing: 2,
-            }}>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.warm[500], letterSpacing: 2 }}>
               가장 나답게!
             </Text>
           </View>
         </View>
 
-        {/* 카카오 로그인 버튼 */}
         <Pressable
           onPress={handleKakaoLogin}
           disabled={loading}
           style={({ pressed }) => ({
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            width: "100%",
-            height: 54,
-            borderRadius: 14,
+            flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+            width: "100%", height: 54, borderRadius: 14,
             backgroundColor: pressed ? "#F5DC00" : "#FEE500",
             opacity: loading ? 0.7 : 1,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.08,
-            shadowRadius: 8,
-            elevation: 3,
+            shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
           })}
         >
           {loading ? (
@@ -151,9 +144,7 @@ export default function LoginScreen() {
           ) : (
             <>
               <Ionicons name="chatbubble" size={18} color="#191919" />
-              <Text style={{ fontSize: 16, fontWeight: "700", color: "#191919" }}>
-                카카오로 시작하기
-              </Text>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: "#191919" }}>카카오로 시작하기</Text>
             </>
           )}
         </Pressable>
@@ -163,11 +154,8 @@ export default function LoginScreen() {
         </Text>
       </View>
 
-      {/* 하단 크레딧 */}
       <View style={{ paddingBottom: 40, alignItems: "center" }}>
-        <Text style={{ fontSize: 11, color: Colors.gray[300] }}>
-          Powered by 풋살메이트
-        </Text>
+        <Text style={{ fontSize: 11, color: Colors.gray[300] }}>Powered by 풋살메이트</Text>
       </View>
     </View>
   );
