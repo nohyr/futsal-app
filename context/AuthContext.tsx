@@ -64,7 +64,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const authUser = s.user;
       const kakaoMeta = authUser.user_metadata || {};
       const name = kakaoMeta.name || kakaoMeta.full_name || kakaoMeta.preferred_username || "풋살러";
-      const profileImage = kakaoMeta.avatar_url || kakaoMeta.picture || null;
+      const rawImage = kakaoMeta.avatar_url || kakaoMeta.picture || null;
+      const profileImage = rawImage ? rawImage.replace("http://", "https://") : null;
 
       // public.users에 upsert
       await supabase.from("users").upsert(
