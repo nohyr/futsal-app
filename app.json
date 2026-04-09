@@ -41,6 +41,12 @@
       "expo-web-browser",
       "expo-font"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/1459bf7d-d57e-417a-9fce-986ac351f50b"
+    },
     "extra": {
       "router": {},
       "eas": {

@@ -32,23 +32,40 @@ export default function LoginScreen() {
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, REDIRECT_URI);
 
-      if (result.type === "success" && result.url) {
-        const url = result.url;
+      // 디버그: 실제 result 확인
+      Alert.alert("DEBUG result", JSON.stringify({ type: result.type, url: (result as any).url?.substring(0, 120) }));
+
+      if (result.type === "success" && (result as any).url) {
+        const url = (result as any).url as string;
         let accessToken: string | null = null;
         let refreshToken: string | null = null;
 
+        // #access_token=... (fragment)
         const hashIndex = url.indexOf("#");
         if (hashIndex !== -1) {
           const hashParams = new URLSearchParams(url.substring(hashIndex + 1));
           accessToken = hashParams.get("access_token");
           refreshToken = hashParams.get("refresh_token");
         }
+        // ?access_token=... (query)
         if (!accessToken) {
           const queryIndex = url.indexOf("?");
           if (queryIndex !== -1) {
             const queryParams = new URLSearchParams(url.substring(queryIndex + 1));
             accessToken = queryParams.get("access_token");
             refreshToken = queryParams.get("refresh_token");
+          }
+        }
+        // ?code=... (PKCE flow)
+        if (!accessToken) {
+          const codeMatch = url.match(/[?&]code=([^&]+)/);
+          if (codeMatch) {
+            const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(codeMatch[1]);
+            if (exchangeError) {
+              Alert.alert("오류", "코드 교환 실패: " + exchangeError.message);
+            }
+            // exchangeCodeForSession이 성공하면 onAuthStateChange가 자동 트리거
+            return;
           }
         }
 
@@ -58,12 +75,15 @@ export default function LoginScreen() {
             refresh_token: refreshToken,
           });
           if (sessionError) {
-            console.error("Session error:", sessionError);
-            Alert.alert("오류", "세션 설정에 실패했습니다.");
+            Alert.alert("오류", "세션 설정 실패: " + sessionError.message);
           }
         } else {
-          Alert.alert("오류", "로그인 토큰을 받지 못했습니다. 다시 시도해주세요.");
+          Alert.alert("디버그", "토큰 없음. URL: " + url.substring(0, 200));
         }
+      } else if (result.type === "dismiss" || result.type === "cancel") {
+        // 사용자가 닫음
+      } else {
+        Alert.alert("디버그", "result.type: " + result.type);
       }
     } catch (e: any) {
       console.error("Kakao login error:", e);
