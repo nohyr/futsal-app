@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { View, Text } from "react-native";
-import { Tabs } from "expo-router";
-import { useIsFocused } from "@react-navigation/native";
+import { View, Text, Image, Pressable } from "react-native";
+import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
+import { Avatar } from "../../components/ui/Avatar";
 import { notices as noticesApi } from "../../lib/api";
 import { Colors } from "../../constants/colors";
 
 export default function TabLayout() {
-  const { currentTeamId } = useAuth();
+  const { currentTeamId, user } = useAuth();
+  const router = useRouter();
   const [unreadCount, setUnreadCount] = useState(0);
 
   const loadUnread = useCallback(async () => {
@@ -21,9 +22,30 @@ export default function TabLayout() {
 
   useEffect(() => {
     loadUnread();
-    const interval = setInterval(loadUnread, 30000); // 30초마다 갱신
+    const interval = setInterval(loadUnread, 30000);
     return () => clearInterval(interval);
   }, [loadUnread]);
+
+  const HeaderLeft = () => (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginLeft: 16 }}>
+      <Image
+        source={require("../../assets/defe-spirit-logo.png")}
+        style={{ width: 28, height: 28 }}
+        resizeMode="contain"
+      />
+      <Text style={{ fontSize: 17, fontWeight: "800", color: Colors.gray[900] }}>데프스피릿</Text>
+    </View>
+  );
+
+  const HeaderRight = () => (
+    <Pressable onPress={() => router.push("/mypage/")} style={{ marginRight: 16 }}>
+      {user?.profileImage ? (
+        <Avatar name={user.name} imageUrl={user.profileImage} size={32} />
+      ) : (
+        <Ionicons name="person-circle-outline" size={32} color={Colors.gray[700]} />
+      )}
+    </Pressable>
+  );
 
   return (
     <Tabs
@@ -31,7 +53,9 @@ export default function TabLayout() {
         headerShown: true,
         headerStyle: { backgroundColor: Colors.gray[0] },
         headerShadowVisible: false,
-        headerTitleStyle: { fontSize: 20, fontWeight: "700", color: Colors.gray[900] },
+        headerTitle: "",
+        headerLeft: () => <HeaderLeft />,
+        headerRight: () => <HeaderRight />,
         tabBarStyle: {
           backgroundColor: Colors.gray[0],
           borderTopColor: Colors.gray[200],

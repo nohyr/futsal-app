@@ -1,13 +1,38 @@
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { Platform, Text as RNText, TextInput } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { View, ActivityIndicator, Text } from "react-native";
+import { useFonts } from "expo-font";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { ToastProvider } from "../context/ToastContext";
 import { usePushNotifications } from "../hooks/usePushNotifications";
 import { supabase } from "../lib/supabase";
 import { Colors } from "../constants/colors";
+
+// 전역 Pretendard 폰트 적용
+const defaultFontFamily = "Pretendard-Regular";
+const oldTextRender = (RNText as any).render;
+if (oldTextRender) {
+  (RNText as any).render = function (...args: any[]) {
+    const origin = oldTextRender.call(this, ...args);
+    const style = origin.props?.style;
+    const fontWeight = style?.fontWeight;
+    let fontFamily = defaultFontFamily;
+    if (fontWeight === "800" || fontWeight === "900") fontFamily = "Pretendard-ExtraBold";
+    else if (fontWeight === "700" || fontWeight === "bold") fontFamily = "Pretendard-Bold";
+    else if (fontWeight === "600") fontFamily = "Pretendard-SemiBold";
+    else if (fontWeight === "500") fontFamily = "Pretendard-Medium";
+    return { ...origin, props: { ...origin.props, style: [{ fontFamily }, style] } };
+  };
+}
+const oldInputRender = (TextInput as any).render;
+if (oldInputRender) {
+  (TextInput as any).render = function (...args: any[]) {
+    const origin = oldInputRender.call(this, ...args);
+    return { ...origin, props: { ...origin.props, style: [{ fontFamily: defaultFontFamily }, origin.props?.style] } };
+  };
+}
 
 function AuthGate() {
   const { isLoggedIn, isLoading, teams } = useAuth();
@@ -138,6 +163,22 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    "Pretendard-Regular": require("../assets/fonts/Pretendard-Regular.otf"),
+    "Pretendard-Medium": require("../assets/fonts/Pretendard-Medium.otf"),
+    "Pretendard-SemiBold": require("../assets/fonts/Pretendard-SemiBold.otf"),
+    "Pretendard-Bold": require("../assets/fonts/Pretendard-Bold.otf"),
+    "Pretendard-ExtraBold": require("../assets/fonts/Pretendard-ExtraBold.otf"),
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.gray[0] }}>
+        <ActivityIndicator size="large" color={Colors.primary[500]} />
+      </View>
+    );
+  }
+
   return (
     <AuthProvider>
       <ToastProvider>

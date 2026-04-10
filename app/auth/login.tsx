@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { View, Text, Pressable, Platform, ActivityIndicator, Alert, Image } from "react-native";
+import { useEffect } from "react";
+import { View, Text, Pressable, Platform, Alert, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
@@ -9,7 +9,6 @@ import { supabase } from "../../lib/supabase";
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
-  const [loading, setLoading] = useState(false);
 
   // Deep link 리스너 — 항상 활성화
   useEffect(() => {
@@ -68,7 +67,6 @@ export default function LoginScreen() {
   };
 
   const handleKakaoLogin = async () => {
-    setLoading(true);
     try {
       if (Platform.OS === "web") {
         await supabase.auth.signInWithOAuth({ provider: "kakao" });
@@ -100,8 +98,6 @@ export default function LoginScreen() {
     } catch (e: any) {
       console.error("Kakao login error:", e);
       Alert.alert("오류", "로그인 중 문제가 발생했습니다.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -132,23 +128,15 @@ export default function LoginScreen() {
 
         <Pressable
           onPress={handleKakaoLogin}
-          disabled={loading}
           style={({ pressed }) => ({
             flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
             width: "100%", height: 54, borderRadius: 14,
             backgroundColor: pressed ? "#F5DC00" : "#FEE500",
-            opacity: loading ? 0.7 : 1,
             shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
           })}
         >
-          {loading ? (
-            <ActivityIndicator size="small" color="#191919" />
-          ) : (
-            <>
-              <Ionicons name="chatbubble" size={18} color="#191919" />
-              <Text style={{ fontSize: 16, fontWeight: "700", color: "#191919" }}>카카오로 시작하기</Text>
-            </>
-          )}
+          <Ionicons name="chatbubble" size={18} color="#191919" />
+          <Text style={{ fontSize: 16, fontWeight: "700", color: "#191919" }}>카카오로 시작하기</Text>
         </Pressable>
 
         <Text style={{ fontSize: 12, color: Colors.gray[500], marginTop: 24, textAlign: "center", lineHeight: 18 }}>

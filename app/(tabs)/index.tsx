@@ -35,29 +35,7 @@ export default function HomeScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.gray[50] }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: 20 }} showsVerticalScrollIndicator={false}>
-        {/* Team Header */}
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 20 }}>
-          <View style={{
-            flexDirection: "row", alignItems: "center", gap: 8,
-            backgroundColor: Colors.gray[0], borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8,
-            shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1,
-          }}>
-            <Ionicons name="shield" size={20} color={Colors.primary[500]} />
-            <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.gray[900] }}>
-              {team?.name || "팀 없음"}
-            </Text>
-            <Ionicons name="chevron-down" size={14} color={Colors.gray[500]} />
-          </View>
-          <Pressable onPress={() => router.push("/mypage/")}>
-            {user?.profileImage ? (
-              <Avatar name={user.name} imageUrl={user.profileImage} size={32} />
-            ) : (
-              <Ionicons name="person-circle-outline" size={32} color={Colors.gray[700]} />
-            )}
-          </Pressable>
-        </View>
-
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: 16 }} showsVerticalScrollIndicator={false}>
         {/* Important Notices */}
         {pinnedNotices.length > 0 && (
           <View style={{ marginBottom: 28 }}>
