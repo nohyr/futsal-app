@@ -159,6 +159,10 @@ function AuthGate() {
         options={{ animation: "slide_from_bottom", presentation: "fullScreenModal" }}
       />
       <Stack.Screen
+        name="my-schedules/index"
+        options={{ headerShown: true, headerTitle: "참여한 일정", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
+      />
+      <Stack.Screen
         name="mypage/index"
         options={{ headerShown: true, headerTitle: "마이페이지", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
       />

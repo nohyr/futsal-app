@@ -102,7 +102,7 @@ export default function MyPageScreen() {
         <View>
           <SectionHeader title="참여한 일정" />
           <View style={{ gap: 6 }}>
-            {mySchedules.slice(0, 10).map((s: any) => {
+            {mySchedules.slice(0, 5).map((s: any) => {
               const myAtt = (s.attendances || []).find((a: any) => a.user_id === user?.id);
               return (
                 <Card key={s.id}>
@@ -121,6 +121,15 @@ export default function MyPageScreen() {
               );
             })}
           </View>
+          {mySchedules.length > 5 && (
+            <Pressable onPress={() => router.push("/my-schedules/")} style={{
+              flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
+              marginTop: 8, paddingVertical: 10, borderRadius: 8, backgroundColor: Colors.gray[100],
+            }}>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.primary[500] }}>전체 {mySchedules.length}건 보기</Text>
+              <Ionicons name="chevron-forward" size={16} color={Colors.primary[500]} />
+            </Pressable>
+          )}
         </View>
       )}
 
