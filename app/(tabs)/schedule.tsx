@@ -295,28 +295,9 @@ export default function ScheduleScreen() {
               <View>
                 <SectionHeader title="지난 일정" />
                 <View style={{ gap: 8 }}>
-                  {past.slice(0, 5).map((s: any) => {
-                    const config = typeConfig[s.type] || typeConfig.match;
-                    const checkedIn = (s.attendances || []).filter((a: any) => a.checked_in).length;
-                    const noShow = (s.attendances || []).filter((a: any) => a.is_no_show).length;
-                    return (
-                      <Card key={s.id}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                          <Badge label={config.label} variant={config.variant} />
-                          <Text style={{ flex: 1, fontSize: 14, color: Colors.gray[900] }}>
-                            {s.opponent ? `vs ${s.opponent}` : s.description}
-                          </Text>
-                          <Text style={{ fontSize: 13, color: Colors.gray[500] }}>{s.date}</Text>
-                        </View>
-                        {(checkedIn > 0 || noShow > 0) && (
-                          <View style={{ flexDirection: "row", gap: 12, marginTop: 6 }}>
-                            <Text style={{ fontSize: 12, color: Colors.success[500] }}>✓ 출석 {checkedIn}</Text>
-                            {noShow > 0 && <Text style={{ fontSize: 12, color: Colors.danger[500] }}>✗ No-show {noShow}</Text>}
-                          </View>
-                        )}
-                      </Card>
-                    );
-                  })}
+                  {past.map((s: any) => (
+                    <PastScheduleCard key={s.id} schedule={s} />
+                  ))}
                 </View>
               </View>
             )}
@@ -560,5 +541,57 @@ function VoteSection({ attendances, notVotedMembers, allMembers }: { attendances
         );
       })()}
     </View>
+  );
+}
+
+// 지난 일정 카드 (참석자 펼치기)
+function PastScheduleCard({ schedule: s }: { schedule: any }) {
+  const [expanded, setExpanded] = useState(false);
+  const config = typeConfig[s.type] || typeConfig.match;
+  const attendances = s.attendances || [];
+  const attending = attendances.filter((a: any) => a.status === "attending" || a.checked_in);
+  const checkedIn = attendances.filter((a: any) => a.checked_in).length;
+  const noShow = attendances.filter((a: any) => a.is_no_show).length;
+
+  return (
+    <Card>
+      <Pressable onPress={() => setExpanded(!expanded)}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Badge label={config.label} variant={config.variant} />
+          <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: Colors.gray[900] }}>
+            {s.opponent ? `vs ${s.opponent}` : s.description}
+          </Text>
+          <Text style={{ fontSize: 12, color: Colors.gray[500] }}>{s.date}</Text>
+          <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={Colors.gray[500]} />
+        </View>
+        <View style={{ flexDirection: "row", gap: 12, marginTop: 6 }}>
+          <Text style={{ fontSize: 12, color: Colors.gray[500] }}>{s.location}</Text>
+          {attending.length > 0 && (
+            <Text style={{ fontSize: 12, color: Colors.success[500] }}>참석 {attending.length}명</Text>
+          )}
+          {checkedIn > 0 && (
+            <Text style={{ fontSize: 12, color: Colors.primary[500] }}>✓ 출석 {checkedIn}</Text>
+          )}
+          {noShow > 0 && (
+            <Text style={{ fontSize: 12, color: Colors.danger[500] }}>✗ No-show {noShow}</Text>
+          )}
+        </View>
+      </Pressable>
+
+      {expanded && attending.length > 0 && (
+        <View style={{ borderTopWidth: 1, borderTopColor: Colors.gray[100], marginTop: 10, paddingTop: 10, gap: 6 }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: Colors.gray[700], marginBottom: 2 }}>참석자 ({attending.length}명)</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {attending.map((a: any) => (
+              <View key={a.id} style={{ flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: Colors.gray[50], borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 }}>
+                <Avatar name={a.users?.name || "?"} imageUrl={a.users?.profile_image} size={22} />
+                <Text style={{ fontSize: 13, color: Colors.gray[900] }}>{a.users?.name}</Text>
+                {a.checked_in && <Ionicons name="checkmark-circle" size={12} color={Colors.success[500]} />}
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+    </Card>
   );
 }
