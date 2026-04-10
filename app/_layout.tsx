@@ -163,6 +163,14 @@ function AuthGate() {
         options={{ animation: "slide_from_bottom", presentation: "fullScreenModal" }}
       />
       <Stack.Screen
+        name="settings/notifications"
+        options={{ headerShown: true, headerTitle: "알림 설정", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
+      />
+      <Stack.Screen
+        name="team-manage/index"
+        options={{ headerShown: true, headerTitle: "팀 관리", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
+      />
+      <Stack.Screen
         name="my-schedules/index"
         options={{ headerShown: true, headerTitle: "참여한 일정", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
       />
