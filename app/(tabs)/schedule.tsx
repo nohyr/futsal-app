@@ -413,53 +413,7 @@ function ScheduleCard({ schedule: s, user, isAdmin, weatherCache, onVote, onMap,
         })}
       </View>
 
-      {(attendances.length > 0 || notVotedMembers.length > 0) && (
-        <View style={{ borderTopWidth: 1, borderTopColor: Colors.gray[100], paddingTop: 12, gap: 6 }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.gray[700], marginBottom: 4 }}>
-            투표 현황 ({attendances.length}/{allMembers.length}명)
-          </Text>
-
-          {/* 투표한 멤버 */}
-          {attendances.map((a: any) => (
-            <View key={a.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 4 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Avatar name={a.users?.name || "?"} imageUrl={a.users?.profile_image} size={28} />
-                <View>
-                  <Text style={{ fontSize: 14, color: Colors.gray[900] }}>{a.users?.name}</Text>
-                  {a.updated_at && (
-                    <Text style={{ fontSize: 11, color: Colors.gray[500] }}>{formatVoteTime(a.updated_at)}</Text>
-                  )}
-                </View>
-              </View>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                {a.checked_in && <Ionicons name="checkmark-circle" size={16} color={Colors.success[500]} />}
-                {a.is_no_show && <Ionicons name="close-circle" size={16} color={Colors.danger[500]} />}
-                <Badge label={voteLabels[a.status] || "미응답"} variant={voteBadge[a.status] || "neutral"} />
-              </View>
-            </View>
-          ))}
-
-          {/* 미투표 멤버 */}
-          {notVotedMembers.length > 0 && (
-            <View style={{
-              marginTop: 8, backgroundColor: Colors.warning[50], borderRadius: 8, padding: 10,
-            }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 }}>
-                <Ionicons name="alert-circle" size={14} color={Colors.warning[500]} />
-                <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.warning[500] }}>
-                  미투표 {notVotedMembers.length}명
-                </Text>
-              </View>
-              {notVotedMembers.map((m: any) => (
-                <View key={m.id} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 3 }}>
-                  <Avatar name={m.users?.name || "?"} imageUrl={m.users?.profile_image} size={24} />
-                  <Text style={{ fontSize: 13, color: Colors.gray[700] }}>{m.users?.name}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
+      <VoteSection attendances={attendances} notVotedMembers={notVotedMembers} allMembers={allMembers} />
 
       {isAdmin && isToday && !hasCheckedIn && (
         <Pressable onPress={() => router.push(`/check-in/${s.id}`)} style={{
@@ -492,6 +446,94 @@ function StatPill({ label, count, color }: { label: string; count: number; color
     <View style={{ flex: 1, alignItems: "center" }}>
       <Text style={{ fontSize: 18, fontWeight: "700", color }}>{count}</Text>
       <Text style={{ fontSize: 11, color: Colors.gray[500] }}>{label}</Text>
+    </View>
+  );
+}
+
+// 투표 현황 섹션 (접기/펼치기)
+function VoteSection({ attendances, notVotedMembers, allMembers }: { attendances: any[]; notVotedMembers: any[]; allMembers: any[] }) {
+  const [expanded, setExpanded] = useState<"attending" | "maybe" | "not_attending" | "notvoted" | null>(null);
+
+  if (allMembers.length === 0) return null;
+
+  const attending = attendances.filter((a: any) => a.status === "attending");
+  const maybe = attendances.filter((a: any) => a.status === "maybe");
+  const notAttending = attendances.filter((a: any) => a.status === "not_attending");
+
+  const groups = [
+    { key: "attending" as const, label: "참석", list: attending, color: Colors.success[500], bg: Colors.success[50], icon: "checkmark-circle" },
+    { key: "maybe" as const, label: "미정", list: maybe, color: Colors.warning[500], bg: Colors.warning[50], icon: "help-circle" },
+    { key: "not_attending" as const, label: "불참", list: notAttending, color: Colors.danger[500], bg: Colors.danger[50], icon: "close-circle" },
+    { key: "notvoted" as const, label: "미투표", list: notVotedMembers, color: Colors.gray[500], bg: Colors.gray[100], icon: "alert-circle" },
+  ];
+
+  return (
+    <View style={{ borderTopWidth: 1, borderTopColor: Colors.gray[100], paddingTop: 12, gap: 6 }}>
+      <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.gray[700], marginBottom: 4 }}>
+        투표 현황 ({attendances.length}/{allMembers.length}명)
+      </Text>
+
+      {/* 요약 버튼 */}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {groups.map((g) => {
+          if (g.list.length === 0) return null;
+          const isOpen = expanded === g.key;
+          return (
+            <Pressable
+              key={g.key}
+              onPress={() => setExpanded(isOpen ? null : g.key)}
+              style={{
+                flexDirection: "row", alignItems: "center", gap: 4,
+                paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20,
+                backgroundColor: isOpen ? g.color : g.bg,
+              }}
+            >
+              <Ionicons name={g.icon as any} size={14} color={isOpen ? "#FFF" : g.color} />
+              <Text style={{ fontSize: 13, fontWeight: "600", color: isOpen ? "#FFF" : g.color }}>
+                {g.label} {g.list.length}
+              </Text>
+              <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={12} color={isOpen ? "#FFF" : g.color} />
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* 펼쳐진 목록 */}
+      {expanded && (() => {
+        const group = groups.find((g) => g.key === expanded);
+        if (!group || group.list.length === 0) return null;
+
+        return (
+          <View style={{ backgroundColor: group.bg, borderRadius: 10, padding: 10, marginTop: 4 }}>
+            {group.key === "notvoted" ? (
+              // 미투표 멤버
+              group.list.map((m: any) => (
+                <View key={m.id} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 }}>
+                  <Avatar name={m.users?.name || "?"} imageUrl={m.users?.profile_image} size={26} />
+                  <Text style={{ fontSize: 13, color: Colors.gray[700] }}>{m.users?.name}</Text>
+                </View>
+              ))
+            ) : (
+              // 투표한 멤버
+              group.list.map((a: any) => (
+                <View key={a.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 5 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Avatar name={a.users?.name || "?"} imageUrl={a.users?.profile_image} size={26} />
+                    <View>
+                      <Text style={{ fontSize: 13, color: Colors.gray[900] }}>{a.users?.name}</Text>
+                      {a.updated_at && (
+                        <Text style={{ fontSize: 10, color: Colors.gray[500] }}>{formatVoteTime(a.updated_at)}</Text>
+                      )}
+                    </View>
+                  </View>
+                  {a.checked_in && <Ionicons name="checkmark-circle" size={14} color={Colors.success[500]} />}
+                  {a.is_no_show && <Ionicons name="close-circle" size={14} color={Colors.danger[500]} />}
+                </View>
+              ))
+            )}
+          </View>
+        );
+      })()}
     </View>
   );
 }
