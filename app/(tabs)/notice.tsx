@@ -8,7 +8,6 @@ import { notices as noticesApi } from "../../lib/api";
 import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Avatar } from "../../components/ui/Avatar";
-import { SectionHeader } from "../../components/ui/SectionHeader";
 import { Colors } from "../../constants/colors";
 import { formatRelativeTime } from "../../lib/utils";
 
@@ -21,23 +20,31 @@ const categoryConfig: Record<string, { label: string; variant: "primary" | "succ
   newmember: { label: "신규팀원", variant: "primary" },
 };
 
-type FilterKey = "all" | "general" | "schedule" | "location" | "fee" | "uniform" | "newmember";
-
 export default function NoticeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { team } = useTeam();
   const { notices, loading, refresh } = useNotices();
-  const [filter, setFilter] = useState<FilterKey>("all");
 
   const members = team?.team_members || [];
   const myMembership = members.find((m: any) => m.users?.auth_id === user?.id || m.user_id === user?.id);
   const isAdmin = myMembership?.role === "admin";
 
-  // 읽음 현황 모달
   const [selectedNotice, setSelectedNotice] = useState<any>(null);
   const [readStats, setReadStats] = useState<any>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+
+  const pinned = notices.filter((n: any) => n.is_pinned);
+  const newmember = notices.filter((n: any) => !n.is_pinned && n.category === "newmember");
+  const general = notices.filter((n: any) => !n.is_pinned && n.category !== "newmember");
+
+  const handleNoticePress = async (notice: any) => {
+    if (!notice.is_read) {
+      await noticesApi.markAsRead(notice.id);
+      refresh();
+    }
+    router.push(`/notice/${notice.id}`);
+  };
 
   const handleReadStats = async (notice: any) => {
     setSelectedNotice(notice);
@@ -49,88 +56,62 @@ export default function NoticeScreen() {
     finally { setStatsLoading(false); }
   };
 
-  const pinned = notices.filter((n: any) => n.is_pinned);
-  const filtered = filter === "all" ? notices : notices.filter((n: any) => n.category === filter);
-  const unpinned = filtered.filter((n: any) => !n.is_pinned);
-
   if (loading) {
     return <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.gray[50] }}><ActivityIndicator size="large" color={Colors.primary[500]} /></View>;
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.gray[50] }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: 16, gap: 8 }} showsVerticalScrollIndicator={false}>
-
-        {/* 카테고리 필터 */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 6, marginBottom: 8 }}>
-          {([{ key: "all" as FilterKey, label: "전체" }, ...Object.entries(categoryConfig).map(([key, cfg]) => ({ key: key as FilterKey, label: cfg.label }))]).map((f) => (
-            <Pressable key={f.key} onPress={() => setFilter(f.key)} style={{
-              paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
-              backgroundColor: filter === f.key ? Colors.primary[500] : Colors.gray[100],
-            }}>
-              <Text style={{ fontSize: 13, fontWeight: "600", color: filter === f.key ? "#FFF" : Colors.gray[700] }}>{f.label}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {/* 고정 공지 (필터 무관하게 항상 표시) */}
-        {filter === "all" && pinned.length > 0 && (
-          <View style={{ paddingHorizontal: 20, gap: 6 }}>
-            {pinned.map((notice: any) => (
-              <Pressable key={notice.id} onPress={() => router.push(`/notice/${notice.id}`)}>
-                <Card variant="warm">
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Ionicons name="pin" size={13} color={Colors.warm[500]} />
-                    <Badge label={categoryConfig[notice.category]?.label || "전체"} variant={categoryConfig[notice.category]?.variant || "neutral"} />
-                    <Text style={{ flex: 1, fontSize: 15, fontWeight: "600", color: Colors.gray[900] }} numberOfLines={1}>{notice.title}</Text>
-                    {!notice.is_read && <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.danger[500] }} />}
-                  </View>
-                  <Text style={{ fontSize: 12, color: Colors.gray[500], marginTop: 4 }}>{formatRelativeTime(notice.created_at)}</Text>
-                </Card>
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        {/* 일반 공지 목록 */}
-        <View style={{ paddingHorizontal: 20, gap: 6 }}>
-          {notices.length === 0 ? (
-            <Card>
-              <View style={{ alignItems: "center", paddingVertical: 24 }}>
-                <Ionicons name="megaphone-outline" size={32} color={Colors.gray[300]} />
-                <Text style={{ fontSize: 14, color: Colors.gray[500], marginTop: 8 }}>아직 공지가 없습니다</Text>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 12 }} showsVerticalScrollIndicator={false}>
+        {notices.length === 0 ? (
+          <Card>
+            <View style={{ alignItems: "center", paddingVertical: 24 }}>
+              <Ionicons name="megaphone-outline" size={32} color={Colors.gray[300]} />
+              <Text style={{ fontSize: 14, color: Colors.gray[500], marginTop: 8 }}>아직 공지가 없습니다</Text>
+            </View>
+          </Card>
+        ) : (
+          <>
+            {/* 📌 중요 공지 */}
+            {pinned.length > 0 && (
+              <View style={{ gap: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="pin" size={16} color={Colors.warm[500]} />
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.gray[900] }}>중요 공지</Text>
+                </View>
+                {pinned.map((notice: any) => (
+                  <NoticeRow key={notice.id} notice={notice} variant="warm" isAdmin={isAdmin} onPress={handleNoticePress} onReadStats={handleReadStats} />
+                ))}
               </View>
-            </Card>
-          ) : unpinned.length === 0 && filter !== "all" ? (
-            <Card>
-              <Text style={{ fontSize: 14, color: Colors.gray[500], textAlign: "center", paddingVertical: 16 }}>해당 카테고리 공지가 없습니다</Text>
-            </Card>
-          ) : (
-            unpinned.map((notice: any) => {
-              const config = categoryConfig[notice.category] || categoryConfig.general;
-              return (
-                <Pressable key={notice.id} onPress={() => router.push(`/notice/${notice.id}`)}>
-                  <Card>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <Badge label={config.label} variant={config.variant} />
-                      <Text style={{ flex: 1, fontSize: 15, fontWeight: "600", color: Colors.gray[900] }} numberOfLines={1}>{notice.title}</Text>
-                      {!notice.is_read && <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.danger[500] }} />}
-                      {isAdmin && (
-                        <Pressable onPress={(e) => { e.stopPropagation(); handleReadStats(notice); }} hitSlop={8}>
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-                            <Ionicons name="eye-outline" size={13} color={Colors.gray[500]} />
-                            <Text style={{ fontSize: 11, color: Colors.gray[500] }}>{notice.read_count || 0}</Text>
-                          </View>
-                        </Pressable>
-                      )}
-                    </View>
-                    <Text style={{ fontSize: 12, color: Colors.gray[500], marginTop: 4 }}>{formatRelativeTime(notice.created_at)}</Text>
-                  </Card>
-                </Pressable>
-              );
-            })
-          )}
-        </View>
+            )}
+
+            {/* 📋 전체 공지 */}
+            {general.length > 0 && (
+              <View style={{ gap: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="document-text" size={16} color={Colors.gray[700]} />
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.gray[900] }}>전체 공지</Text>
+                </View>
+                {general.map((notice: any) => (
+                  <NoticeRow key={notice.id} notice={notice} variant="default" isAdmin={isAdmin} onPress={handleNoticePress} onReadStats={handleReadStats} />
+                ))}
+              </View>
+            )}
+
+            {/* 🆕 신규팀원 공지 */}
+            {newmember.length > 0 && (
+              <View style={{ gap: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="people" size={16} color={Colors.primary[500]} />
+                  <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.gray[900] }}>신규팀원 공지</Text>
+                </View>
+                {newmember.map((notice: any) => (
+                  <NoticeRow key={notice.id} notice={notice} variant="default" isAdmin={isAdmin} onPress={handleNoticePress} onReadStats={handleReadStats} />
+                ))}
+              </View>
+            )}
+          </>
+        )}
       </ScrollView>
 
       {isAdmin && (
@@ -186,5 +167,50 @@ export default function NoticeScreen() {
         </Pressable>
       </Modal>
     </View>
+  );
+}
+
+function NoticeRow({ notice, variant, isAdmin, onPress, onReadStats }: {
+  notice: any; variant: "warm" | "default"; isAdmin: boolean;
+  onPress: (n: any) => void; onReadStats: (n: any) => void;
+}) {
+  const config = categoryConfig[notice.category] || categoryConfig.general;
+
+  return (
+    <Pressable onPress={() => onPress(notice)}>
+      <Card variant={variant}>
+        <View style={{ flexDirection: "row", alignItems: "center", height: 24 }}>
+          {/* 카테고리 — 고정 너비 */}
+          <View style={{ width: 64 }}>
+            <Badge label={config.label} variant={config.variant} />
+          </View>
+
+          {/* 제목 — flex 차지 */}
+          <Text style={{ flex: 1, fontSize: 15, fontWeight: "600", color: Colors.gray[900], marginLeft: 8 }} numberOfLines={1}>
+            {notice.title}
+          </Text>
+
+          {/* 미읽음 점 */}
+          {!notice.is_read && (
+            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.danger[500], marginLeft: 8 }} />
+          )}
+
+          {/* 날짜 — 고정 너비 */}
+          <Text style={{ fontSize: 12, color: Colors.gray[500], marginLeft: 10, width: 50, textAlign: "right" }}>
+            {formatRelativeTime(notice.created_at)}
+          </Text>
+
+          {/* 관리자 읽음 수 */}
+          {isAdmin && (
+            <Pressable onPress={() => onReadStats(notice)} hitSlop={8} style={{ marginLeft: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                <Ionicons name="eye-outline" size={14} color={Colors.gray[500]} />
+                <Text style={{ fontSize: 12, color: Colors.gray[500], minWidth: 14 }}>{notice.read_count || 0}</Text>
+              </View>
+            </Pressable>
+          )}
+        </View>
+      </Card>
+    </Pressable>
   );
 }
