@@ -131,6 +131,10 @@ function AuthGate() {
         options={{ headerShown: true, headerTitle: "", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
       />
       <Stack.Screen
+        name="notice/[id]"
+        options={{ headerShown: true, headerTitle: "공지사항", headerBackTitle: "뒤로", headerTintColor: "#3182F6" }}
+      />
+      <Stack.Screen
         name="create-monthly/index"
         options={{ animation: "slide_from_bottom", presentation: "fullScreenModal" }}
       />

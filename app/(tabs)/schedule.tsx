@@ -324,7 +324,7 @@ export default function ScheduleScreen() {
         )}
       </ScrollView>
 
-      <Pressable
+      {isAdmin && <Pressable
         onPress={() => router.push("/create-schedule/")}
         style={{
           position: "absolute", bottom: 24, right: 20, width: 56, height: 56, borderRadius: 28,
@@ -333,7 +333,7 @@ export default function ScheduleScreen() {
         }}
       >
         <Ionicons name="add" size={28} color="#FFF" />
-      </Pressable>
+      </Pressable>}
     </View>
   );
 }

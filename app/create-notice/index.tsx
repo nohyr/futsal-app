@@ -8,10 +8,11 @@ import { notices as noticesApi } from "../../lib/api";
 import { Button } from "../../components/ui/Button";
 import { Colors } from "../../constants/colors";
 
-type Category = "general" | "schedule" | "location" | "fee" | "uniform";
+type Category = "general" | "schedule" | "location" | "fee" | "uniform" | "newmember";
 const categories: { key: Category; label: string }[] = [
-  { key: "general", label: "일반" }, { key: "schedule", label: "일정" },
-  { key: "location", label: "장소" }, { key: "fee", label: "회비" }, { key: "uniform", label: "유니폼" },
+  { key: "general", label: "전체" }, { key: "schedule", label: "일정" },
+  { key: "location", label: "장소" }, { key: "fee", label: "회비" },
+  { key: "uniform", label: "유니폼" }, { key: "newmember", label: "신규팀원" },
 ];
 
 export default function CreateNoticeScreen() {
