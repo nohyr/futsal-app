@@ -17,6 +17,9 @@ export default function HomeScreen() {
   const { schedules } = useSchedules();
   const { notices } = useNotices();
 
+  const members = team?.team_members || [];
+  const myMembership = members.find((m: any) => m.user_id === user?.id);
+  const isAdmin = myMembership?.role === "admin";
   const pinnedNotices = notices.filter((n: any) => n.is_pinned);
   const now = new Date();
   const endOfWeek = new Date(now);
@@ -36,6 +39,23 @@ export default function HomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: Colors.gray[50] }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: 16 }} showsVerticalScrollIndicator={false}>
+
+        {/* Admin 월간 안내 생성 바로가기 */}
+        {isAdmin && (
+          <Pressable onPress={() => router.push("/create-monthly/")} style={{
+            flexDirection: "row", alignItems: "center", gap: 10,
+            marginHorizontal: 20, marginBottom: 16, paddingHorizontal: 16, paddingVertical: 14,
+            backgroundColor: Colors.warm[50], borderRadius: 12, borderWidth: 1, borderColor: Colors.warm[400],
+          }}>
+            <Ionicons name="megaphone" size={20} color={Colors.warm[500]} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: Colors.gray[900] }}>월간 안내 생성</Text>
+              <Text style={{ fontSize: 12, color: Colors.gray[500] }}>공지 + 회비 + 일정 한번에 등록</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.gray[300]} />
+          </Pressable>
+        )}
+
         {/* Important Notices */}
         {pinnedNotices.length > 0 && (
           <View style={{ marginBottom: 28 }}>

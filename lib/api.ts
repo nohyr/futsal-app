@@ -616,6 +616,95 @@ export const expenses = {
 };
 
 // =============================================
+// Monthly Announcement (월간 안내 일괄 생성)
+// =============================================
+export const monthlyAnnouncement = {
+  /** 공지 + 회비 + 일정 동시 생성 */
+  async create(teamId: string, data: {
+    month: string; // "2026-04"
+    scheduleItems: { date: string; time: string; endTime: string; type: string; label: string }[];
+    location: string;
+    feeAmount: number;
+    feeIncludes: string[];
+    deadline: string; // "2026-03-31 21:00"
+    bankAccount: string;
+    message: string;
+    noticeContent: string; // 자동 포맷팅된 전체 텍스트
+  }) {
+    const userId = (await auth.getUser())?.id;
+    if (!userId) throw new Error("Not authenticated");
+
+    // 1. 공지 생성 (상단 고정)
+    const { data: notice } = await supabase
+      .from("notices")
+      .insert({
+        team_id: teamId,
+        author_id: userId,
+        title: `${data.month.replace("-", "년 ")}월 클래스 & 회비 안내`,
+        content: data.noticeContent,
+        category: "schedule",
+        is_pinned: true,
+      })
+      .select()
+      .single();
+
+    // 2. 회비 항목 생성 + 팀원 전체 미납 등록
+    const { data: feeItem } = await supabase
+      .from("fee_items")
+      .insert({
+        team_id: teamId,
+        name: `${data.month.replace("-", "년 ")}월 회비`,
+        amount: data.feeAmount,
+        category: "monthly",
+        month: data.month,
+        description: data.feeIncludes.join(" + ") + " 포함",
+      })
+      .select()
+      .single();
+
+    if (feeItem) {
+      const { data: members } = await supabase
+        .from("team_members")
+        .select("user_id")
+        .eq("team_id", teamId);
+
+      if (members && members.length > 0) {
+        const paymentRecords = members.map((m: any) => ({
+          fee_item_id: feeItem.id,
+          user_id: m.user_id,
+          is_paid: false,
+        }));
+        await supabase.from("fee_payments").insert(paymentRecords);
+      }
+    }
+
+    // 3. 일정 등록
+    for (const item of data.scheduleItems) {
+      await supabase.from("schedules").insert({
+        team_id: teamId,
+        type: item.type === "lesson" ? "training" : item.type === "practice" ? "training" : "match",
+        date: item.date,
+        time: item.time,
+        location: data.location,
+        description: item.label,
+      });
+    }
+
+    // 4. 팀원 전체 알림
+    notifications.sendToTeam(
+      teamId,
+      "new_notice",
+      `${data.month.replace("-", "년 ")}월 안내`,
+      `클래스 & 회비 안내가 등록되었습니다`,
+      { route: "/(tabs)/notice" },
+      userId,
+    );
+
+    return { notice, feeItem };
+  },
+};
+
+// =============================================
 // Notifications
 // =============================================
 export const notifications = {
