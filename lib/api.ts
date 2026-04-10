@@ -178,8 +178,35 @@ export const posts = {
     return data;
   },
 
+  /** 게시글 수정 */
+  async update(postId: string, updates: { title?: string; content?: string }) {
+    const { data } = await supabase
+      .from("posts")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", postId)
+      .select()
+      .single();
+    return data;
+  },
+
   async delete(postId: string) {
     return supabase.from("posts").delete().eq("id", postId);
+  },
+
+  /** 댓글 수정 */
+  async updateComment(commentId: string, content: string) {
+    const { data } = await supabase
+      .from("comments")
+      .update({ content })
+      .eq("id", commentId)
+      .select("*, users!author_id(*)")
+      .single();
+    return data;
+  },
+
+  /** 댓글 삭제 */
+  async deleteComment(commentId: string) {
+    return supabase.from("comments").delete().eq("id", commentId);
   },
 };
 

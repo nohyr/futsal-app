@@ -4,7 +4,7 @@ import { ScrollView, View, Text, Pressable, ActivityIndicator, Modal } from "rea
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
-import { useTeam, usePosts, useRecords, useAttendanceStats } from "../../hooks/useSupabase";
+import { useTeam, usePosts, useRecords, useAttendanceStats, useSchedules } from "../../hooks/useSupabase";
 import { Card } from "../../components/ui/Card";
 import { Avatar } from "../../components/ui/Avatar";
 import { Badge } from "../../components/ui/Badge";
@@ -18,11 +18,15 @@ export default function MyPageScreen() {
   const { posts } = usePosts();
   const { records } = useRecords();
   const { stats: attendanceStats } = useAttendanceStats();
+  const { schedules } = useSchedules();
 
   const members = team?.team_members || [];
   const myMembership = members.find((m: any) => m.user_id === user?.id);
   const myPosts = posts.filter((p: any) => p.author_id === user?.id);
   const myStat = attendanceStats.find((s: any) => s.user_id === user?.id);
+  const mySchedules = schedules.filter((s: any) =>
+    (s.attendances || []).some((a: any) => a.user_id === user?.id && (a.status === "attending" || a.checked_in))
+  ).sort((a: any, b: any) => b.date.localeCompare(a.date));
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const handleLogout = async () => {
@@ -89,6 +93,33 @@ export default function MyPageScreen() {
                 </Card>
               </Pressable>
             ))}
+          </View>
+        </View>
+      )}
+
+      {/* 참여한 일정 */}
+      {mySchedules.length > 0 && (
+        <View>
+          <SectionHeader title="참여한 일정" />
+          <View style={{ gap: 6 }}>
+            {mySchedules.slice(0, 10).map((s: any) => {
+              const myAtt = (s.attendances || []).find((a: any) => a.user_id === user?.id);
+              return (
+                <Card key={s.id}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Badge
+                      label={s.type === "match" ? "경기" : s.type === "training" ? "훈련" : "모임"}
+                      variant={s.type === "match" ? "primary" : "neutral"}
+                    />
+                    <Text style={{ flex: 1, fontSize: 14, fontWeight: "600", color: Colors.gray[900] }}>
+                      {s.opponent ? `vs ${s.opponent}` : s.description || ""}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: Colors.gray[500] }}>{s.date}</Text>
+                    {myAtt?.checked_in && <Ionicons name="checkmark-circle" size={16} color={Colors.success[500]} />}
+                  </View>
+                </Card>
+              );
+            })}
           </View>
         </View>
       )}

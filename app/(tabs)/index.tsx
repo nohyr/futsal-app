@@ -8,6 +8,7 @@ import { Card } from "../../components/ui/Card";
 import { Badge } from "../../components/ui/Badge";
 import { Avatar } from "../../components/ui/Avatar";
 import { Colors } from "../../constants/colors";
+import { formatRelativeTime } from "../../lib/utils";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -122,7 +123,7 @@ export default function HomeScreen() {
                       <Avatar name={post.users?.name || "?"} imageUrl={post.users?.profile_image} size={36} />
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.gray[900] }}>{post.users?.name}</Text>
-                        <Text style={{ fontSize: 12, color: Colors.gray[500] }}>{post.created_at?.slice(0, 10)}</Text>
+                        <Text style={{ fontSize: 12, color: Colors.gray[500] }}>{formatRelativeTime(post.created_at)}</Text>
                       </View>
                       <Badge
                         label={post.type === "video" ? "영상" : post.type === "record" ? "기록" : "피드백"}
