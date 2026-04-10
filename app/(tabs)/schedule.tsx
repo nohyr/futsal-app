@@ -12,18 +12,16 @@ import { Colors } from "../../constants/colors";
 import { schedules as schedulesApi } from "../../lib/api";
 import { getWeatherForSchedule, getMapUrl, WeatherForecast } from "../../lib/weather";
 
-const typeConfig: Record<string, { label: string; variant: "primary" | "neutral" | "warning" }> = {
-  match: { label: "경기", variant: "primary" },
-  training: { label: "훈련", variant: "neutral" },
-  gathering: { label: "모임", variant: "warning" },
+const typeConfig: Record<string, { label: string; variant: "primary" | "neutral" | "warning"; color: string }> = {
+  match: { label: "경기", variant: "primary", color: Colors.primary[500] },
+  training: { label: "훈련", variant: "neutral", color: Colors.gray[500] },
+  gathering: { label: "모임", variant: "warning", color: Colors.warm[500] },
 };
 
-const voteLabels: Record<string, string> = {
-  attending: "참석", maybe: "미정", not_attending: "불참", pending: "미응답",
-};
-const voteBadge: Record<string, "success" | "warning" | "danger" | "neutral"> = {
-  attending: "success", maybe: "warning", not_attending: "danger", pending: "neutral",
-};
+const voteLabels: Record<string, string> = { attending: "참석", maybe: "미정", not_attending: "불참", pending: "미응답" };
+const voteBadge: Record<string, "success" | "warning" | "danger" | "neutral"> = { attending: "success", maybe: "warning", not_attending: "danger", pending: "neutral" };
+
+type ViewMode = "calendar" | "list";
 
 export default function ScheduleScreen() {
   const router = useRouter();
@@ -35,8 +33,14 @@ export default function ScheduleScreen() {
   const myMembership = members.find((m: any) => m.users?.auth_id === user?.id || m.user_id === user?.id);
   const isAdmin = myMembership?.role === "admin";
   const [weatherCache, setWeatherCache] = useState<Record<string, WeatherForecast | null>>({});
+  const [viewMode, setViewMode] = useState<ViewMode>("calendar");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  // 날씨 데이터 로드 (다가오는 일정만, 5일 이내)
+  // 캘린더 상태
+  const todayDate = new Date();
+  const [calYear, setCalYear] = useState(todayDate.getFullYear());
+  const [calMonth, setCalMonth] = useState(todayDate.getMonth() + 1);
+
   useEffect(() => {
     const loadWeather = async () => {
       const fiveDaysLater = new Date();
@@ -55,8 +59,7 @@ export default function ScheduleScreen() {
   }, [schedules]);
 
   const openMap = (location: string) => {
-    const url = getMapUrl(location);
-    Linking.openURL(url).catch(() => {});
+    Linking.openURL(getMapUrl(location)).catch(() => {});
   };
 
   const today = new Date().toISOString().slice(0, 10);
@@ -68,6 +71,27 @@ export default function ScheduleScreen() {
     refresh();
   };
 
+  // 캘린더 계산
+  const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+  const firstDayOfWeek = new Date(calYear, calMonth - 1, 1).getDay();
+  const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+  const calendarDays: (number | null)[] = [];
+  for (let i = 0; i < firstDayOfWeek; i++) calendarDays.push(null);
+  for (let d = 1; d <= daysInMonth; d++) calendarDays.push(d);
+
+  // 날짜별 일정 매핑
+  const schedulesByDate = new Map<string, any[]>();
+  schedules.forEach((s: any) => {
+    const key = s.date;
+    if (!schedulesByDate.has(key)) schedulesByDate.set(key, []);
+    schedulesByDate.get(key)!.push(s);
+  });
+
+  const prevMonth = () => { if (calMonth === 1) { setCalYear(calYear - 1); setCalMonth(12); } else setCalMonth(calMonth - 1); setSelectedDate(null); };
+  const nextMonth = () => { if (calMonth === 12) { setCalYear(calYear + 1); setCalMonth(1); } else setCalMonth(calMonth + 1); setSelectedDate(null); };
+
+  const selectedSchedules = selectedDate ? (schedulesByDate.get(selectedDate) || []) : [];
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.gray[50] }}>
@@ -78,195 +102,215 @@ export default function ScheduleScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: Colors.gray[50] }}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 24 }} showsVerticalScrollIndicator={false}>
-        {/* Upcoming */}
-        <View>
-          <SectionHeader title="다가오는 일정" />
-          {upcoming.length === 0 ? (
-            <Card>
-              <Text style={{ fontSize: 14, color: Colors.gray[500], textAlign: "center", paddingVertical: 16 }}>
-                다가오는 일정이 없습니다
-              </Text>
-            </Card>
-          ) : (
-            <View style={{ gap: 12 }}>
-              {upcoming.map((s: any) => {
-                const config = typeConfig[s.type] || typeConfig.match;
-                const attendances = s.attendances || [];
-                const attendingCount = attendances.filter((a: any) => a.status === "attending").length;
-                const maybeCount = attendances.filter((a: any) => a.status === "maybe").length;
-                const notAttendingCount = attendances.filter((a: any) => a.status === "not_attending").length;
-                const myAttendance = attendances.find((a: any) => a.user_id === user?.id);
-                const isToday = s.date === today;
-                const hasCheckedIn = attendances.some((a: any) => a.checked_in);
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 16 }} showsVerticalScrollIndicator={false}>
 
-                return (
-                  <Card key={s.id}>
-                    {/* Header */}
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <Badge label={config.label} variant={config.variant} />
-                      {isToday && <Badge label="오늘" variant="danger" />}
-                      <Text style={{ fontSize: 13, color: Colors.gray[500] }}>{s.date} {s.time}</Text>
-                    </View>
-
-                    <Text style={{ fontSize: 17, fontWeight: "600", color: Colors.gray[900], marginBottom: 4 }}>
-                      {s.opponent ? `vs ${s.opponent}` : s.description || config.label}
-                    </Text>
-                    {/* 구장 + 길찾기 */}
-                    <Pressable onPress={() => openMap(s.location)} style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 }}>
-                      <Ionicons name="location" size={14} color={Colors.primary[500]} />
-                      <Text style={{ fontSize: 13, color: Colors.primary[500], textDecorationLine: "underline" }}>{s.location}</Text>
-                      <Ionicons name="navigate-outline" size={12} color={Colors.primary[500]} />
-                    </Pressable>
-
-                    {/* 날씨 */}
-                    {weatherCache[s.id] && (
-                      <View style={{
-                        flexDirection: "row", alignItems: "center", gap: 8,
-                        backgroundColor: weatherCache[s.id]!.isRainy ? Colors.danger[50] : Colors.primary[50],
-                        borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
-                      }}>
-                        <Text style={{ fontSize: 20 }}>{weatherCache[s.id]!.emoji}</Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.gray[900] }}>
-                            {weatherCache[s.id]!.temp}° · {weatherCache[s.id]!.description}
-                          </Text>
-                          <Text style={{ fontSize: 12, color: Colors.gray[500] }}>
-                            체감 {weatherCache[s.id]!.feelsLike}° · 강수 {Math.round(weatherCache[s.id]!.pop * 100)}% · 바람 {weatherCache[s.id]!.windSpeed}m/s
-                          </Text>
-                        </View>
-                        {weatherCache[s.id]!.isRainy && (
-                          <Badge label="우천 주의" variant="danger" />
-                        )}
-                      </View>
-                    )}
-
-                    {/* 참석 현황 상세 */}
-                    <View style={{
-                      flexDirection: "row", backgroundColor: Colors.gray[50], borderRadius: 8, padding: 12, marginBottom: 12, gap: 12,
-                    }}>
-                      <StatPill label="참석" count={attendingCount} color={Colors.success[500]} />
-                      <StatPill label="미정" count={maybeCount} color={Colors.warning[500]} />
-                      <StatPill label="불참" count={notAttendingCount} color={Colors.danger[500]} />
-                    </View>
-
-                    {/* 투표 버튼 */}
-                    <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-                      {(["attending", "maybe", "not_attending"] as const).map((status) => {
-                        const isSelected = myAttendance?.status === status;
-                        return (
-                          <Pressable
-                            key={status}
-                            onPress={() => handleVote(s.id, status)}
-                            style={{
-                              flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center",
-                              backgroundColor: isSelected ? Colors.primary[500] : Colors.gray[100],
-                            }}
-                          >
-                            <Text style={{
-                              fontSize: 14, fontWeight: "600",
-                              color: isSelected ? "#FFF" : Colors.gray[700],
-                            }}>
-                              {voteLabels[status]}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-
-                    {/* 참석 인원 목록 */}
-                    {attendances.length > 0 && (
-                      <View style={{ borderTopWidth: 1, borderTopColor: Colors.gray[100], paddingTop: 12, gap: 8 }}>
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.gray[700], marginBottom: 4 }}>
-                          투표 현황 ({attendances.length}명)
-                        </Text>
-                        {attendances.map((a: any) => (
-                          <View key={a.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                              <Avatar name={a.users?.name || "?"} imageUrl={a.users?.profile_image} size={28} />
-                              <Text style={{ fontSize: 14, color: Colors.gray[900] }}>{a.users?.name}</Text>
-                            </View>
-                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                              {a.checked_in && (
-                                <Ionicons name="checkmark-circle" size={16} color={Colors.success[500]} />
-                              )}
-                              {a.is_no_show && (
-                                <Ionicons name="close-circle" size={16} color={Colors.danger[500]} />
-                              )}
-                              <Badge label={voteLabels[a.status] || "미응답"} variant={voteBadge[a.status] || "neutral"} />
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                    {/* 출석 체크 버튼 (admin + 당일) */}
-                    {isAdmin && isToday && !hasCheckedIn && (
-                      <Pressable
-                        onPress={() => router.push(`/check-in/${s.id}`)}
-                        style={{
-                          flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-                          marginTop: 12, paddingVertical: 12, borderRadius: 8,
-                          backgroundColor: Colors.warm[50], borderWidth: 1, borderColor: Colors.warm[400],
-                        }}
-                      >
-                        <Ionicons name="checkbox-outline" size={18} color={Colors.warm[500]} />
-                        <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.warm[500] }}>출석 체크하기</Text>
-                      </Pressable>
-                    )}
-
-                    {/* 출석 체크 완료 표시 */}
-                    {hasCheckedIn && (
-                      <View style={{
-                        flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
-                        marginTop: 12, paddingVertical: 10, borderRadius: 8, backgroundColor: Colors.success[50],
-                      }}>
-                        <Ionicons name="checkmark-circle" size={16} color={Colors.success[500]} />
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.success[500] }}>
-                          출석 체크 완료 · {attendances.filter((a: any) => a.checked_in).length}명 출석
-                          {attendances.some((a: any) => a.is_no_show) &&
-                            ` · ${attendances.filter((a: any) => a.is_no_show).length}명 No-show`}
-                        </Text>
-                      </View>
-                    )}
-                  </Card>
-                );
-              })}
-            </View>
-          )}
+        {/* 뷰 모드 전환 */}
+        <View style={{ flexDirection: "row", backgroundColor: Colors.gray[100], borderRadius: 12, padding: 4 }}>
+          <Pressable onPress={() => setViewMode("calendar")} style={{
+            flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+            paddingVertical: 8, borderRadius: 8,
+            backgroundColor: viewMode === "calendar" ? Colors.gray[0] : "transparent",
+          }}>
+            <Ionicons name="calendar" size={16} color={viewMode === "calendar" ? Colors.primary[500] : Colors.gray[500]} />
+            <Text style={{ fontSize: 14, fontWeight: "600", color: viewMode === "calendar" ? Colors.primary[500] : Colors.gray[500] }}>캘린더</Text>
+          </Pressable>
+          <Pressable onPress={() => setViewMode("list")} style={{
+            flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+            paddingVertical: 8, borderRadius: 8,
+            backgroundColor: viewMode === "list" ? Colors.gray[0] : "transparent",
+          }}>
+            <Ionicons name="list" size={16} color={viewMode === "list" ? Colors.primary[500] : Colors.gray[500]} />
+            <Text style={{ fontSize: 14, fontWeight: "600", color: viewMode === "list" ? Colors.primary[500] : Colors.gray[500] }}>리스트</Text>
+          </Pressable>
         </View>
 
-        {/* Past */}
-        {past.length > 0 && (
-          <View>
-            <SectionHeader title="지난 일정" />
-            <View style={{ gap: 8 }}>
-              {past.slice(0, 5).map((s: any) => {
-                const config = typeConfig[s.type] || typeConfig.match;
-                const attendances = s.attendances || [];
-                const checkedIn = attendances.filter((a: any) => a.checked_in).length;
-                const noShow = attendances.filter((a: any) => a.is_no_show).length;
+        {/* ===== 1안: 캘린더 뷰 ===== */}
+        {viewMode === "calendar" && (
+          <>
+            <Card>
+              {/* 월 네비게이션 */}
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <Pressable onPress={prevMonth} style={{ padding: 4 }}>
+                  <Ionicons name="chevron-back" size={22} color={Colors.gray[700]} />
+                </Pressable>
+                <Text style={{ fontSize: 18, fontWeight: "700", color: Colors.gray[900] }}>{calYear}년 {calMonth}월</Text>
+                <Pressable onPress={nextMonth} style={{ padding: 4 }}>
+                  <Ionicons name="chevron-forward" size={22} color={Colors.gray[700]} />
+                </Pressable>
+              </View>
 
-                return (
-                  <Card key={s.id}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Badge label={config.label} variant={config.variant} />
-                      <Text style={{ flex: 1, fontSize: 14, color: Colors.gray[900] }}>
-                        {s.opponent ? `vs ${s.opponent}` : s.description}
-                      </Text>
-                      <Text style={{ fontSize: 13, color: Colors.gray[500] }}>{s.date}</Text>
-                    </View>
-                    {(checkedIn > 0 || noShow > 0) && (
-                      <View style={{ flexDirection: "row", gap: 12, marginTop: 6 }}>
-                        <Text style={{ fontSize: 12, color: Colors.success[500] }}>✓ 출석 {checkedIn}</Text>
-                        {noShow > 0 && <Text style={{ fontSize: 12, color: Colors.danger[500] }}>✗ No-show {noShow}</Text>}
+              {/* 요일 헤더 */}
+              <View style={{ flexDirection: "row", marginBottom: 8 }}>
+                {dayNames.map((d, i) => (
+                  <View key={i} style={{ flex: 1, alignItems: "center" }}>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: i === 0 ? Colors.danger[500] : i === 6 ? Colors.primary[500] : Colors.gray[500] }}>{d}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* 날짜 그리드 */}
+              <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                {calendarDays.map((day, i) => {
+                  if (day === null) return <View key={i} style={{ width: "14.28%", height: 56 }} />;
+                  const dateKey = `${calYear}-${String(calMonth).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                  const daySchedules = schedulesByDate.get(dateKey) || [];
+                  const isToday = dateKey === today;
+                  const isSelected = dateKey === selectedDate;
+                  const dow = i % 7;
+
+                  return (
+                    <Pressable key={i} onPress={() => setSelectedDate(isSelected ? null : dateKey)} style={{ width: "14.28%", alignItems: "center", paddingVertical: 4 }}>
+                      <View style={[
+                        { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+                        isSelected && { backgroundColor: Colors.primary[500] },
+                        isToday && !isSelected && { borderWidth: 2, borderColor: Colors.primary[500] },
+                      ]}>
+                        <Text style={{
+                          fontSize: 15, fontWeight: isToday || isSelected ? "700" : "400",
+                          color: isSelected ? "#FFF" : dow === 0 ? Colors.danger[500] : dow === 6 ? Colors.primary[500] : Colors.gray[900],
+                        }}>{day}</Text>
                       </View>
-                    )}
+                      {/* 일정 도트 */}
+                      <View style={{ flexDirection: "row", gap: 2, marginTop: 2, height: 6 }}>
+                        {daySchedules.slice(0, 3).map((s: any) => (
+                          <View key={s.id} style={{
+                            width: 5, height: 5, borderRadius: 3,
+                            backgroundColor: typeConfig[s.type]?.color || Colors.primary[500],
+                          }} />
+                        ))}
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {/* 범례 */}
+              <View style={{ flexDirection: "row", gap: 16, marginTop: 12, justifyContent: "center" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary[500] }} />
+                  <Text style={{ fontSize: 11, color: Colors.gray[500] }}>경기</Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.gray[500] }} />
+                  <Text style={{ fontSize: 11, color: Colors.gray[500] }}>훈련</Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.warm[500] }} />
+                  <Text style={{ fontSize: 11, color: Colors.gray[500] }}>모임</Text>
+                </View>
+              </View>
+            </Card>
+
+            {/* 선택한 날짜의 일정 */}
+            {selectedDate && (
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: Colors.gray[900], marginBottom: 8 }}>
+                  {selectedDate.replace(/-/g, ".")} 일정
+                </Text>
+                {selectedSchedules.length === 0 ? (
+                  <Card>
+                    <Text style={{ fontSize: 14, color: Colors.gray[500], textAlign: "center", paddingVertical: 12 }}>이 날짜에 일정이 없습니다</Text>
                   </Card>
-                );
-              })}
+                ) : (
+                  <View style={{ gap: 10 }}>
+                    {selectedSchedules.map((s: any) => (
+                      <ScheduleCard key={s.id} schedule={s} user={user} isAdmin={isAdmin} weatherCache={weatherCache} onVote={handleVote} onMap={openMap} router={router} team={team} />
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* 선택 안 했을 때 다가오는 일정 미니 리스트 */}
+            {!selectedDate && upcoming.length > 0 && (
+              <View>
+                <SectionHeader title="다가오는 일정" />
+                <View style={{ gap: 8 }}>
+                  {upcoming.slice(0, 3).map((s: any) => {
+                    const config = typeConfig[s.type] || typeConfig.match;
+                    const attendingCount = (s.attendances || []).filter((a: any) => a.status === "attending").length;
+                    return (
+                      <Pressable key={s.id} onPress={() => {
+                        const d = new Date(s.date);
+                        setCalYear(d.getFullYear());
+                        setCalMonth(d.getMonth() + 1);
+                        setSelectedDate(s.date);
+                      }}>
+                        <Card>
+                          <View style={{ flexDirection: "row", alignItems: "center" }}>
+                            <View style={{ width: 4, height: 40, borderRadius: 2, backgroundColor: config.color, marginRight: 12 }} />
+                            <View style={{ flex: 1 }}>
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                                <Badge label={config.label} variant={config.variant} />
+                                <Text style={{ fontSize: 12, color: Colors.gray[500] }}>{s.date} {s.time}</Text>
+                              </View>
+                              <Text style={{ fontSize: 15, fontWeight: "600", color: Colors.gray[900] }}>
+                                {s.opponent ? `vs ${s.opponent}` : s.description || config.label}
+                              </Text>
+                            </View>
+                            <View style={{ alignItems: "center" }}>
+                              <Text style={{ fontSize: 18, fontWeight: "700", color: Colors.primary[500] }}>{attendingCount}</Text>
+                              <Text style={{ fontSize: 10, color: Colors.gray[500] }}>참석</Text>
+                            </View>
+                          </View>
+                        </Card>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* ===== 2안: 리스트 뷰 ===== */}
+        {viewMode === "list" && (
+          <>
+            <View>
+              <SectionHeader title="다가오는 일정" />
+              {upcoming.length === 0 ? (
+                <Card>
+                  <Text style={{ fontSize: 14, color: Colors.gray[500], textAlign: "center", paddingVertical: 16 }}>다가오는 일정이 없습니다</Text>
+                </Card>
+              ) : (
+                <View style={{ gap: 12 }}>
+                  {upcoming.map((s: any) => (
+                    <ScheduleCard key={s.id} schedule={s} user={user} isAdmin={isAdmin} weatherCache={weatherCache} onVote={handleVote} onMap={openMap} router={router} team={team} />
+                  ))}
+                </View>
+              )}
             </View>
-          </View>
+
+            {past.length > 0 && (
+              <View>
+                <SectionHeader title="지난 일정" />
+                <View style={{ gap: 8 }}>
+                  {past.slice(0, 5).map((s: any) => {
+                    const config = typeConfig[s.type] || typeConfig.match;
+                    const checkedIn = (s.attendances || []).filter((a: any) => a.checked_in).length;
+                    const noShow = (s.attendances || []).filter((a: any) => a.is_no_show).length;
+                    return (
+                      <Card key={s.id}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <Badge label={config.label} variant={config.variant} />
+                          <Text style={{ flex: 1, fontSize: 14, color: Colors.gray[900] }}>
+                            {s.opponent ? `vs ${s.opponent}` : s.description}
+                          </Text>
+                          <Text style={{ fontSize: 13, color: Colors.gray[500] }}>{s.date}</Text>
+                        </View>
+                        {(checkedIn > 0 || noShow > 0) && (
+                          <View style={{ flexDirection: "row", gap: 12, marginTop: 6 }}>
+                            <Text style={{ fontSize: 12, color: Colors.success[500] }}>✓ 출석 {checkedIn}</Text>
+                            {noShow > 0 && <Text style={{ fontSize: 12, color: Colors.danger[500] }}>✗ No-show {noShow}</Text>}
+                          </View>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
 
@@ -281,6 +325,165 @@ export default function ScheduleScreen() {
         <Ionicons name="add" size={28} color="#FFF" />
       </Pressable>
     </View>
+  );
+}
+
+// 투표 시간 포맷
+function formatVoteTime(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const h = d.getHours();
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${m}/${day} ${h}:${min}`;
+}
+
+// 일정 상세 카드 (공통 사용)
+function ScheduleCard({ schedule: s, user, isAdmin, weatherCache, onVote, onMap, router, team }: any) {
+  const config = typeConfig[s.type] || typeConfig.match;
+  const attendances = s.attendances || [];
+  const attendingCount = attendances.filter((a: any) => a.status === "attending").length;
+  const maybeCount = attendances.filter((a: any) => a.status === "maybe").length;
+  const notAttendingCount = attendances.filter((a: any) => a.status === "not_attending").length;
+  const myAttendance = attendances.find((a: any) => a.user_id === user?.id);
+  const isToday = s.date === new Date().toISOString().slice(0, 10);
+  const hasCheckedIn = attendances.some((a: any) => a.checked_in);
+
+  // 미투표 멤버 계산
+  const allMembers = team?.team_members || [];
+  const votedUserIds = new Set(attendances.map((a: any) => a.user_id));
+  const notVotedMembers = allMembers.filter((m: any) => !votedUserIds.has(m.user_id));
+
+  return (
+    <Card>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <Badge label={config.label} variant={config.variant} />
+        {isToday && <Badge label="오늘" variant="danger" />}
+        <Text style={{ fontSize: 13, color: Colors.gray[500] }}>{s.date} {s.time}</Text>
+      </View>
+
+      <Text style={{ fontSize: 17, fontWeight: "600", color: Colors.gray[900], marginBottom: 4 }}>
+        {s.opponent ? `vs ${s.opponent}` : s.description || config.label}
+      </Text>
+
+      <Pressable onPress={() => onMap(s.location)} style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 }}>
+        <Ionicons name="location" size={14} color={Colors.primary[500]} />
+        <Text style={{ fontSize: 13, color: Colors.primary[500], textDecorationLine: "underline" }}>{s.location}</Text>
+      </Pressable>
+
+      {weatherCache[s.id] && (
+        <View style={{
+          flexDirection: "row", alignItems: "center", gap: 8,
+          backgroundColor: weatherCache[s.id]!.isRainy ? Colors.danger[50] : Colors.primary[50],
+          borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
+        }}>
+          <Text style={{ fontSize: 20 }}>{weatherCache[s.id]!.emoji}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.gray[900] }}>
+              {weatherCache[s.id]!.temp}° · {weatherCache[s.id]!.description}
+            </Text>
+            <Text style={{ fontSize: 12, color: Colors.gray[500] }}>
+              체감 {weatherCache[s.id]!.feelsLike}° · 강수 {Math.round(weatherCache[s.id]!.pop * 100)}%
+            </Text>
+          </View>
+          {weatherCache[s.id]!.isRainy && <Badge label="우천 주의" variant="danger" />}
+        </View>
+      )}
+
+      <View style={{ flexDirection: "row", backgroundColor: Colors.gray[50], borderRadius: 8, padding: 12, marginBottom: 12, gap: 12 }}>
+        <StatPill label="참석" count={attendingCount} color={Colors.success[500]} />
+        <StatPill label="미정" count={maybeCount} color={Colors.warning[500]} />
+        <StatPill label="불참" count={notAttendingCount} color={Colors.danger[500]} />
+      </View>
+
+      <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+        {(["attending", "maybe", "not_attending"] as const).map((status) => {
+          const isSelected = myAttendance?.status === status;
+          return (
+            <Pressable key={status} onPress={() => onVote(s.id, status)} style={{
+              flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center",
+              backgroundColor: isSelected ? Colors.primary[500] : Colors.gray[100],
+            }}>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: isSelected ? "#FFF" : Colors.gray[700] }}>
+                {voteLabels[status]}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {(attendances.length > 0 || notVotedMembers.length > 0) && (
+        <View style={{ borderTopWidth: 1, borderTopColor: Colors.gray[100], paddingTop: 12, gap: 6 }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.gray[700], marginBottom: 4 }}>
+            투표 현황 ({attendances.length}/{allMembers.length}명)
+          </Text>
+
+          {/* 투표한 멤버 */}
+          {attendances.map((a: any) => (
+            <View key={a.id} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 4 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Avatar name={a.users?.name || "?"} imageUrl={a.users?.profile_image} size={28} />
+                <View>
+                  <Text style={{ fontSize: 14, color: Colors.gray[900] }}>{a.users?.name}</Text>
+                  {a.updated_at && (
+                    <Text style={{ fontSize: 11, color: Colors.gray[500] }}>{formatVoteTime(a.updated_at)}</Text>
+                  )}
+                </View>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                {a.checked_in && <Ionicons name="checkmark-circle" size={16} color={Colors.success[500]} />}
+                {a.is_no_show && <Ionicons name="close-circle" size={16} color={Colors.danger[500]} />}
+                <Badge label={voteLabels[a.status] || "미응답"} variant={voteBadge[a.status] || "neutral"} />
+              </View>
+            </View>
+          ))}
+
+          {/* 미투표 멤버 */}
+          {notVotedMembers.length > 0 && (
+            <View style={{
+              marginTop: 8, backgroundColor: Colors.warning[50], borderRadius: 8, padding: 10,
+            }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 }}>
+                <Ionicons name="alert-circle" size={14} color={Colors.warning[500]} />
+                <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.warning[500] }}>
+                  미투표 {notVotedMembers.length}명
+                </Text>
+              </View>
+              {notVotedMembers.map((m: any) => (
+                <View key={m.id} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 3 }}>
+                  <Avatar name={m.users?.name || "?"} imageUrl={m.users?.profile_image} size={24} />
+                  <Text style={{ fontSize: 13, color: Colors.gray[700] }}>{m.users?.name}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {isAdmin && isToday && !hasCheckedIn && (
+        <Pressable onPress={() => router.push(`/check-in/${s.id}`)} style={{
+          flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+          marginTop: 12, paddingVertical: 12, borderRadius: 8,
+          backgroundColor: Colors.warm[50], borderWidth: 1, borderColor: Colors.warm[400],
+        }}>
+          <Ionicons name="checkbox-outline" size={18} color={Colors.warm[500]} />
+          <Text style={{ fontSize: 14, fontWeight: "600", color: Colors.warm[500] }}>출석 체크하기</Text>
+        </Pressable>
+      )}
+
+      {hasCheckedIn && (
+        <View style={{
+          flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+          marginTop: 12, paddingVertical: 10, borderRadius: 8, backgroundColor: Colors.success[50],
+        }}>
+          <Ionicons name="checkmark-circle" size={16} color={Colors.success[500]} />
+          <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.success[500] }}>
+            출석 체크 완료 · {attendances.filter((a: any) => a.checked_in).length}명 출석
+          </Text>
+        </View>
+      )}
+    </Card>
   );
 }
 
