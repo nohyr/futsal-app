@@ -1,5 +1,7 @@
-import { ScrollView, View, Text, Image, ActivityIndicator } from "react-native";
+import { ScrollView, View, Text, Image, ActivityIndicator, Pressable } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { Ionicons } from "@expo/vector-icons";
+import { useToast } from "../../context/ToastContext";
 import { useTeam, useAttendanceStats } from "../../hooks/useSupabase";
 import { Card } from "../../components/ui/Card";
 import { Avatar } from "../../components/ui/Avatar";
@@ -10,6 +12,14 @@ export default function TeamScreen() {
   const { team, loading } = useTeam();
 
   const { stats: attendanceStats } = useAttendanceStats();
+  const { showToast } = useToast();
+
+  const copyInviteCode = async () => {
+    const code = team?.invite_code;
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    showToast("초대 코드가 복사되었습니다", "success");
+  };
   const members = team?.team_members || [];
 
   if (loading) {
@@ -60,17 +70,24 @@ export default function TeamScreen() {
       </Card>
 
       {/* Invite Code */}
-      <Card>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <View>
-            <Text style={{ fontSize: 13, color: Colors.gray[500], marginBottom: 4 }}>초대 코드</Text>
-            <Text style={{ fontSize: 20, fontWeight: "700", color: Colors.primary[500], letterSpacing: 2 }}>
-              {team?.invite_code || ""}
-            </Text>
+      <Pressable onPress={copyInviteCode}>
+        <Card>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View>
+              <Text style={{ fontSize: 13, color: Colors.gray[500], marginBottom: 4 }}>초대 코드</Text>
+              <Text style={{ fontSize: 20, fontWeight: "700", color: Colors.primary[500], letterSpacing: 2 }}>
+                {team?.invite_code || ""}
+              </Text>
+            </View>
+            <View style={{
+              width: 40, height: 40, borderRadius: 20,
+              backgroundColor: Colors.primary[50], alignItems: "center", justifyContent: "center",
+            }}>
+              <Ionicons name="copy-outline" size={20} color={Colors.primary[500]} />
+            </View>
           </View>
-          <Ionicons name="copy-outline" size={22} color={Colors.gray[500]} />
-        </View>
-      </Card>
+        </Card>
+      </Pressable>
 
       {/* Members List */}
       <View>
