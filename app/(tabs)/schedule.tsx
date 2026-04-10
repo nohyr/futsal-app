@@ -425,7 +425,7 @@ function ScheduleCard({ schedule: s, user, isAdmin, weatherCache, onVote, onMap,
 
       <VoteSection attendances={attendances} notVotedMembers={notVotedMembers} allMembers={allMembers} />
 
-      {/* 미투표자 알림 버튼 (admin + 미투표자 있을 때) */}
+      {/* 미투표자 알림 버튼 (admin + 미투표자 있을 때) — 매일 자동 알림 확인 후 활성화 예정
       {isAdmin && notVotedMembers.length > 0 && (
         <Pressable onPress={() => onRemind(s.id)} style={{
           flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
@@ -438,6 +438,7 @@ function ScheduleCard({ schedule: s, user, isAdmin, weatherCache, onVote, onMap,
           </Text>
         </Pressable>
       )}
+      */}
 
       {isAdmin && isToday && !hasCheckedIn && (
         <Pressable onPress={() => router.push(`/check-in/${s.id}`)} style={{
