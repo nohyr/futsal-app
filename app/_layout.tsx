@@ -43,9 +43,26 @@ function AuthGate() {
     }
   }, []);
 
+  const [isReady, setIsReady] = useState(false);
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
+
   useEffect(() => {
     if (isLoading || isProcessingCallback) return;
 
+    // 초기 라우트 결정 (최초 1회)
+    if (!isReady) {
+      if (!isLoggedIn) {
+        setInitialRoute("/auth/login");
+      } else if (teams.length === 0) {
+        setInitialRoute("/onboarding/team-setup");
+      } else {
+        setInitialRoute("/(tabs)");
+      }
+      setIsReady(true);
+      return;
+    }
+
+    // 이후 상태 변경 시 라우팅
     const inAuthGroup = segments[0] === "auth";
     const inOnboarding = segments[0] === "onboarding";
 
@@ -60,15 +77,19 @@ function AuthGate() {
     } else if (isLoggedIn && !inOnboarding && teams.length === 0) {
       router.replace("/onboarding/team-setup");
     }
-  }, [isLoggedIn, isLoading, isProcessingCallback, teams, segments]);
+  }, [isLoggedIn, isLoading, isProcessingCallback, teams, segments, isReady]);
 
-  if (isLoading || isProcessingCallback) {
+  // 초기 라우트가 결정되면 즉시 이동
+  useEffect(() => {
+    if (isReady && initialRoute) {
+      router.replace(initialRoute as any);
+    }
+  }, [isReady, initialRoute]);
+
+  if (!isReady || isLoading || isProcessingCallback) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: Colors.gray[0] }}>
         <ActivityIndicator size="large" color={Colors.primary[500]} />
-        {isProcessingCallback && (
-          <Text style={{ marginTop: 16, fontSize: 15, color: Colors.gray[500] }}>로그인 처리 중...</Text>
-        )}
       </View>
     );
   }
