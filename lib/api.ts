@@ -233,6 +233,53 @@ export const schedules = {
     return supabase.from("schedules").delete().eq("id", scheduleId);
   },
 
+  /** 미투표자에게 알림 발송 */
+  async sendVoteReminder(scheduleId: string, teamId: string) {
+    // 일정 정보 조회
+    const { data: schedule } = await supabase
+      .from("schedules")
+      .select("*, attendances(user_id)")
+      .eq("id", scheduleId)
+      .single();
+
+    if (!schedule) return;
+
+    // 팀 멤버 조회
+    const { data: members } = await supabase
+      .from("team_members")
+      .select("user_id")
+      .eq("team_id", teamId);
+
+    if (!members) return;
+
+    // 투표한 유저 ID
+    const votedIds = new Set((schedule.attendances || []).map((a: any) => a.user_id));
+
+    // 미투표자 필터
+    const notVotedUserIds = members
+      .map((m: any) => m.user_id)
+      .filter((uid: string) => !votedIds.has(uid));
+
+    if (notVotedUserIds.length === 0) return 0;
+
+    // 일정 제목 생성
+    const typeLabel = schedule.type === "match" ? "경기" : schedule.type === "training" ? "훈련" : "모임";
+    const title = schedule.opponent ? `vs ${schedule.opponent}` : schedule.description || typeLabel;
+
+    // 각 미투표자에게 알림 발송
+    for (const userId of notVotedUserIds) {
+      await notifications.sendToUser(
+        userId,
+        "attendance_request",
+        "참석 여부를 알려주세요",
+        `${schedule.date} ${schedule.time} ${title} - 아직 투표하지 않았습니다`,
+        { route: "/(tabs)/schedule" },
+      );
+    }
+
+    return notVotedUserIds.length;
+  },
+
   /** admin: 특정 멤버 출석 체크 */
   async checkIn(scheduleId: string, userId: string) {
     const { data } = await supabase

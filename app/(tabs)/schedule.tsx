@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ScrollView, View, Text, Pressable, ActivityIndicator, Linking } from "react-native";
+import { ScrollView, View, Text, Pressable, ActivityIndicator, Linking, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSchedules, useTeam } from "../../hooks/useSupabase";
@@ -9,6 +9,7 @@ import { Badge } from "../../components/ui/Badge";
 import { Avatar } from "../../components/ui/Avatar";
 import { SectionHeader } from "../../components/ui/SectionHeader";
 import { Colors } from "../../constants/colors";
+import { useToast } from "../../context/ToastContext";
 import { schedules as schedulesApi } from "../../lib/api";
 import { getWeatherForSchedule, getMapUrl, WeatherForecast } from "../../lib/weather";
 
@@ -66,9 +67,18 @@ export default function ScheduleScreen() {
   const upcoming = schedules.filter((s: any) => s.date >= today).sort((a: any, b: any) => a.date.localeCompare(b.date));
   const past = schedules.filter((s: any) => s.date < today).sort((a: any, b: any) => b.date.localeCompare(a.date));
 
+  const { showToast } = useToast();
+
   const handleVote = async (scheduleId: string, status: string) => {
     await schedulesApi.vote(scheduleId, status);
     refresh();
+  };
+
+  const handleRemind = async (scheduleId: string) => {
+    const teamId = team?.id;
+    if (!teamId) return;
+    const count = await schedulesApi.sendVoteReminder(scheduleId, teamId);
+    showToast(`미투표 ${count || 0}명에게 알림을 보냈습니다`, "success");
   };
 
   // 캘린더 계산
@@ -214,7 +224,7 @@ export default function ScheduleScreen() {
                 ) : (
                   <View style={{ gap: 10 }}>
                     {selectedSchedules.map((s: any) => (
-                      <ScheduleCard key={s.id} schedule={s} user={user} isAdmin={isAdmin} weatherCache={weatherCache} onVote={handleVote} onMap={openMap} router={router} team={team} />
+                      <ScheduleCard key={s.id} schedule={s} user={user} isAdmin={isAdmin} weatherCache={weatherCache} onVote={handleVote} onRemind={handleRemind} onMap={openMap} router={router} team={team} />
                     ))}
                   </View>
                 )}
@@ -275,7 +285,7 @@ export default function ScheduleScreen() {
               ) : (
                 <View style={{ gap: 12 }}>
                   {upcoming.map((s: any) => (
-                    <ScheduleCard key={s.id} schedule={s} user={user} isAdmin={isAdmin} weatherCache={weatherCache} onVote={handleVote} onMap={openMap} router={router} team={team} />
+                    <ScheduleCard key={s.id} schedule={s} user={user} isAdmin={isAdmin} weatherCache={weatherCache} onVote={handleVote} onRemind={handleRemind} onMap={openMap} router={router} team={team} />
                   ))}
                 </View>
               )}
@@ -340,7 +350,7 @@ function formatVoteTime(dateStr: string | null): string {
 }
 
 // 일정 상세 카드 (공통 사용)
-function ScheduleCard({ schedule: s, user, isAdmin, weatherCache, onVote, onMap, router, team }: any) {
+function ScheduleCard({ schedule: s, user, isAdmin, weatherCache, onVote, onMap, onRemind, router, team }: any) {
   const config = typeConfig[s.type] || typeConfig.match;
   const attendances = s.attendances || [];
   const attendingCount = attendances.filter((a: any) => a.status === "attending").length;
@@ -414,6 +424,20 @@ function ScheduleCard({ schedule: s, user, isAdmin, weatherCache, onVote, onMap,
       </View>
 
       <VoteSection attendances={attendances} notVotedMembers={notVotedMembers} allMembers={allMembers} />
+
+      {/* 미투표자 알림 버튼 (admin + 미투표자 있을 때) */}
+      {isAdmin && notVotedMembers.length > 0 && (
+        <Pressable onPress={() => onRemind(s.id)} style={{
+          flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+          marginTop: 12, paddingVertical: 10, borderRadius: 8,
+          backgroundColor: Colors.warning[50], borderWidth: 1, borderColor: Colors.warning[500],
+        }}>
+          <Ionicons name="notifications-outline" size={16} color={Colors.warning[500]} />
+          <Text style={{ fontSize: 13, fontWeight: "600", color: Colors.warning[500] }}>
+            미투표 {notVotedMembers.length}명에게 알림 보내기
+          </Text>
+        </Pressable>
+      )}
 
       {isAdmin && isToday && !hasCheckedIn && (
         <Pressable onPress={() => router.push(`/check-in/${s.id}`)} style={{
